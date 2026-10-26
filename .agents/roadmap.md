@@ -1,7 +1,7 @@
 # zudiff: roadmap
 
 Status: draft 2026-10-26. Implements [design.md](design.md).
-Target: v0.1.0, the first CRAN release (design Q4 assumes `Planned`).
+Target: v0.1.0, the first CRAN release (design Q4 recommends CRAN).
 Tracking: [v0.1.0 (#1)](https://github.com/pedrobtz/zudiff/issues/1), with
 one sub-issue per stage;
 [CRAN-submission (#12)](https://github.com/pedrobtz/zudiff/issues/12).
@@ -135,8 +135,8 @@ script, and the script round-trips.
   straight to `diff_bytes()`, unpacking with `readBin()`, the format
   version check, and the `zudiff` object.
 - `diff_vec()`, `diff_edits()`, `diff_identical()` and `diff_apply()`.
-  Decide whether `diff_edits()` uses 1-based inclusive ranges or start and
-  length (design §16) and record it in the design.
+  `diff_edits()` reports 1-based start-and-length ranges (design §5.1).
+- Ids computed as `match(x, x)` (design §6.1, D3).
 - `zudiff_input_error` for mismatched or unsupported types and long
   vectors.
 - Tests: the round-trip property over every §6.1 type with `NA` and `NaN`
@@ -174,8 +174,9 @@ correct script, and Ctrl-C ends a long diff.
   interrupt in R. The change is recorded in `tools/goose/PROVENANCE`.
 - An O(NM) dynamic-programming edit-distance reference in
   `tests/testthat/helper-reference.R`.
-- Compare the `max_cost` default against GNU diff's and git's heuristics
-  on the benchmark corpus (Q1) and record the outcome in the design.
+- Check the recommended `max_cost` default (design Q1) against GNU
+  diffutils' `analyze.c` and git's `xdiff/xdiffi.c`, compare the three on
+  the benchmark corpus, and record the outcome in the design.
 
 **Exit criteria.**
 
@@ -231,13 +232,15 @@ GNU-compatible unified diff.
 **Work.**
 
 - `diff_text()`: split into lines with their endings kept, and the
-  no-newline marker. Line endings are compared as they are (Q3).
+  no-newline marker. Line endings are compared exactly (Q3), and the
+  documentation warns that CRLF against LF differs on every line.
 - `diff_hunks()` with configurable context, merging overlapping hunks.
-  Name the hunk object's fields (design §16).
+  Hunk fields as in design §5.1.
 - `diff_unified()` with `---` and `+++` headers and `@@` hunk headers;
   `format()` per element for `diff_vec()` results.
-- The print method: a unified diff with three lines of context, truncated
-  to the console width. Decide and document the truncation rule (§16).
+- The print method: a unified diff with three lines of context, at most
+  `n` lines (50 by default) with a footer, each clipped to the console
+  width (design §5.1).
 - Tests: snapshots of unified output; GNU `patch` interop where the CI
   image has it.
 
@@ -296,8 +299,9 @@ vectored exception handler and a console control handler`.
 
 **Work.**
 
-- Decide Q5 first: write the Windows half here, or copy `zugoose`'s if its
-  Windows stage has landed. Record the answer in the design.
+- Confirm Q5 first. The recommendation is to write the Windows half here,
+  unless `zugoose`'s Windows stage has landed, and to offer it to
+  `zugoose` and `zugojson` afterwards. Record the answer in the design.
 - The Windows half of `goose_r_runtime.c`: `VirtualAlloc` with
   `PAGE_NOACCESS` for the stack gap, a vectored exception handler for the
   fault, and a console control handler for Ctrl-C. Remove the `#error`.
@@ -349,7 +353,10 @@ features.
 
 **Work.**
 
-- `README.Rmd` and one article, with its examples chosen here (§16).
+- `README.Rmd` and one article, with its examples chosen from design
+  §16's candidates.
+- Check that the tarball carries `tools/goose/`, the source of the
+  generated C (design Q4).
 - `Version: 0.1.0` and the matching `NEWS.md` heading.
 - `cran-comments.md` listing the r-actions CI legs as test environments.
 - The `pkg-critical-review` skill, with its blocking and required findings
@@ -382,15 +389,19 @@ From design §14, in the expected order:
 
 ## Open questions
 
-- **D3, equality through `match()`**, is the decision the design flags
-  for a second look. Confirm it before Stage 2 builds on it.
-- **Q1**, the `max_cost` default: answered in Stage 3.
-- **Q2**, a tolerance for doubles: the design says no. Revisit only if a
-  sibling asks before Stage 2 merges.
-- **Q3**, line-ending normalisation: Stage 5 treats them as different.
-- **Q4**, CRAN or GitHub release: the board's `CRAN intent`; this roadmap
-  assumes CRAN.
-- **Q5**, Windows by hand or from `zugoose`: decided at the start of
-  Stage 7.
-- **Design §16**: `diff_edits()` ranges (Stage 2), hunk field names and
-  the print truncation rule (Stage 5), the article's examples (Stage 9).
+The design records a recommendation for each (2026-10-26). These are the
+stages that confirm them.
+
+- **D3, equality through `match()`**: kept, with ids from `match(x, x)`.
+  Stage 2 builds on it.
+- **Q1**, the `max_cost` default: GNU diff's `max(4096, sqrt(N + M))`
+  recommended, checked against the sources in Stage 3.
+- **Q2**, a tolerance for doubles: settled, no; callers round first.
+- **Q3**, line endings: settled, compared exactly; `strip_cr` is after
+  0.1.0.
+- **Q4**, CRAN or GitHub: CRAN recommended, since siblings will import
+  `zudiff`. The board's `CRAN intent` records it.
+- **Q5**, Windows: written in `zudiff` and offered upstream, confirmed at
+  the start of Stage 7.
+- **Design §16**: ranges, hunk fields and printing are settled in design
+  §5.1; the article's examples are chosen in Stage 9.

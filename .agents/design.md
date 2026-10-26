@@ -211,7 +211,7 @@ diff_vec(old, new, algorithm = c("myers", "patience"), max_cost = NULL)
 diff_text(old, new, algorithm = c("myers", "patience"), max_cost = NULL)
 
 # reading it
-diff_edits(d)                  # data frame: op, old_from, old_to, new_from, new_to
+diff_edits(d)                  # op, old_start, old_len, new_start, new_len
 diff_hunks(d, context = 3L)    # list of hunks, each with its edits
 diff_identical(d)              # TRUE when the script has no inserts or deletes
 
@@ -228,7 +228,28 @@ zudiff_info()
 
 A `zudiff` object holds the two inputs (R's copy-on-modify means no copy),
 the runs, the algorithm, and whether the result is minimal. It prints as a
-unified diff with three lines of context, truncated to the console width.
+unified diff with three lines of context, truncated as §5.1 says.
+
+### 5.1 Ranges, hunks and printing
+
+These settle what the RFC left open (§16).
+
+- **Ranges are a 1-based start and a length.** `diff_edits()` returns
+  `op`, `old_start`, `old_len`, `new_start`, `new_len`, the same shape as
+  the packed script (§7) and the unified `@@ -l,s +l,s @@` header. An
+  insert has `old_len = 0`, and its `old_start` is the position it goes
+  before. Inclusive `from` and `to` ranges are not used: an empty range has
+  `to < from`, and `x[from:to]` then counts down and selects the wrong
+  elements. With a length, `x[seq.int(start, length.out = len)]` is always
+  right.
+- **A hunk has the fields** `old_start`, `old_len`, `new_start`,
+  `new_len` and `edits`, the hunk's rows of `diff_edits()`. A hunk reads as
+  its own `@@` header.
+- **Printing caps the total and clips each line.** The print method shows
+  at most `n` lines, 50 by default, and ends with a footer saying how many
+  lines were left out and that `print(d, n = Inf)` shows them all. Each
+  line is clipped to `getOption("width")`. Clipping alone would still let a
+  10⁵-line diff flood the console.
 
 `diff_text()` takes two strings, splits each into lines with their endings
 kept, and diffs the lines. A string not ending in a newline gets the
@@ -242,18 +263,27 @@ a `diff_vec()` result formats each element with `format()` as one line.
 Two elements are equal when `match()` says so. The R layer computes
 
 ```r
-ids <- match(c(old, new), unique(c(old, new)))
+x <- c(old, new)
+ids <- match(x, x)
 ```
 
-and passes the first `length(old)` ids and the rest to `diff_ids`. That
-makes `match()`'s rules `zudiff`'s rules, documented once:
+and passes the first `length(old)` ids and the rest to `diff_ids`. Each id
+is the index of the value's first occurrence: one hashing pass rather than
+the two of `match(x, unique(x))`, and ids stay below N + M, so patience's
+flat count arrays (§6.4) still work. That makes `match()`'s rules
+`zudiff`'s rules, documented once:
 
 - `NA` equals `NA`, and `NaN` equals `NaN`; `NA` and `NaN` differ.
 - `0` and `-0` are equal.
 - Strings compare after translation to a common encoding, so the same
   text in Latin-1 and UTF-8 is equal.
 - Factors compare by level label, not by code, so two factors with the
-  same labels in a different level order diff correctly.
+  same labels in a different level order diff correctly. This rests on
+  `c()` combining factors by label, which R does from 4.1, the version
+  §3 requires.
+- Doubles compare exactly; there is no tolerance (Q2). Callers who want
+  one round first, for example `diff_vec(round(x, 6), round(y, 6))`,
+  which stays transitive and keeps the choice in their own code.
 
 `old` and `new` must have the same type after the usual factor-to-character
 rule; a logical against an integer is a `zudiff_input_error`, not a silent
@@ -278,7 +308,10 @@ middle snake, recurse on each side. Memory is O(N + M) on Goose's data
 stacks.
 
 The answer is minimal unless the cost limit is reached. `max_cost`, an
-edit distance, defaults to `max(256, sqrt(N + M) * 8)` when `NULL`. When
+edit distance, defaults to `max(4096, sqrt(N + M))` when `NULL`, following
+GNU diff rather than git (Q1). `zudiff`'s output is data that siblings
+build on and tests snapshot, so a non-minimal script surprises more than a
+slow one, and a slow one can be interrupted. When
 the middle-snake search passes it, the search stops and splits at the
 furthest-reaching diagonal found so far, as GNU diff does. The result is
 still a correct script, and the object records `minimal = FALSE`.
@@ -454,7 +487,8 @@ Marked **(M)** when the maintainer decided it in the conversation and
   R users already expect. The cost is one pass and one `c()` copy in R,
   which §10 measures. The alternative, hashing in Goose, needs a hash of
   doubles and strings that reproduces R's equality, and the strings cannot
-  reach Goose as a vector at the pin anyway.
+  reach Goose as a vector at the pin anyway. Reviewed 2026-10-26 and kept,
+  with ids computed as `match(x, x)` (§6.1).
 - **D4 (C).** The script is packed into bytes (§7) until Goose exports
   can return integer vectors.
 - **D5 (C).** Myers with a cost limit by default, minimal on request, and
@@ -486,28 +520,46 @@ Marked **(M)** when the maintainer decided it in the conversation and
   and for display.
 - **Histogram diff**, git's refinement of patience, if users ask.
 - **Patch fuzz and offsets**, as GNU `patch` does.
+- **A `strip_cr` argument** to `diff_text()`, as GNU diff's
+  `--strip-trailing-cr` (Q3).
 - **Three-way merge** with conflict markers.
 - **Diffs of files and directories**, with `zufs` once it exists.
 
 ## 15. Open questions
 
-- **Q1.** Is the `max_cost` default right? GNU diff and git use different
-  heuristics; Stage 2 compares the three on the benchmark corpus.
+Each question has a recommendation, recorded 2026-10-26. A question stays
+listed until the stage named confirms it.
+
+- **Q1.** Is the `max_cost` default right? Recommended: GNU diff's,
+  `max(4096, sqrt(N + M))`, over git's floor of 256 (§6.3). Both numbers
+  are from memory: Stage 2 checks them against GNU diffutils' `analyze.c`
+  and git's `xdiff/xdiffi.c`, and compares the three on the benchmark
+  corpus.
 - **Q2.** Should `diff_vec()` on doubles offer a tolerance, as `waldo`
-  does? A tolerance breaks transitivity, and Myers assumes it; this RFC
-  says no and leaves rounding to the caller.
+  does? Settled: no. A tolerance breaks transitivity, and Myers assumes
+  it; callers round first (§6.1).
 - **Q3.** Should `diff_text()` normalise line endings (`\r\n` against
-  `\n`)? This RFC treats them as different, as `diff` does, with an
-  argument to strip them deferred.
-- **Q4.** Is v0.1.0 a CRAN submission or a GitHub release? The board's
-  `CRAN intent` field records the answer; this RFC assumes `Planned`,
-  since `zudiff` is a runtime package with users, unlike `zugoose`.
+  `\n`)? Settled: no, compared exactly, as `diff` and git do. The
+  documentation warns that a CRLF file against an LF file differs on
+  every line, `patch_apply()` keeps `old`'s endings, and a `strip_cr`
+  argument is §14.
+- **Q4.** Is v0.1.0 a CRAN submission or a GitHub release? Recommended:
+  CRAN. `daffiz`, `zurds` and `zupdf` will import `zudiff`, and a CRAN
+  package cannot import one that is not on CRAN. `zudiff` may be the
+  first Goose-generated package on CRAN, so the tarball must carry the
+  source of its generated C: `tools/goose/` stays out of `.Rbuildignore`.
 - **Q5.** For Windows (D10), does `zudiff` write its own runtime half, or
-  wait for `zugoose`'s Stage 5 and copy it? Decide when `zudiff` reaches
-  Stage 6, depending on where `zugoose` is.
+  wait for `zugoose`'s Stage 5 and copy it? Recommended: write it in
+  `zudiff`, since `zugoose` has not started and is unlikely to get there
+  first. Keep it in its own section of the runtime, close to RFC 0044
+  §6.2, and offer it to `zugoose` and `zugojson`, so the work is done once
+  rather than three times. Confirm when `zudiff` reaches Stage 6.
 
 ## 16. What this RFC does not decide
 
-The print method's truncation rule, the names of the hunk object's
-fields, whether `diff_edits()` uses 1-based inclusive ranges or start and
-length, and the article's examples.
+The article's examples are chosen when it is written. The candidates are
+two versions of an R function under Myers and patience, where patience
+keeps the bodies aligned; a vector diff showing the §6.1 rules for `NA`
+and factors; the round trip through `diff_unified()`, `patch_parse()` and
+`patch_apply()`; and a byte diff of two raw vectors. The rest of what this
+section first listed is settled in §5.1.
