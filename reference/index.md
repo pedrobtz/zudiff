@@ -15,5 +15,9 @@
   : Write a diff as a unified diff
 - [`diff_vec()`](https://pedrobtz.github.io/zudiff/reference/diff_vec.md)
   : Diff two vectors
+- [`patch_apply()`](https://pedrobtz.github.io/zudiff/reference/patch_apply.md)
+  : Apply a unified diff
+- [`patch_parse()`](https://pedrobtz.github.io/zudiff/reference/patch_parse.md)
+  : Read a unified diff
 - [`zudiff_info()`](https://pedrobtz.github.io/zudiff/reference/zudiff_info.md)
   : Information about zudiff

@@ -41,6 +41,9 @@
 <li>
 <code><a href="../reference/diff_hunks.html">diff_hunks()</a></code> groups changes with context, and <code><a href="../reference/diff_unified.html">diff_unified()</a></code> writes a unified diff that GNU <code>patch</code> and <code>git apply</code> apply. A <code>zudiff</code> object prints as one, capped at 50 lines.</li>
 <li>
+<code><a href="../reference/patch_parse.html">patch_parse()</a></code> reads unified diffs, from <code><a href="../reference/diff_unified.html">diff_unified()</a></code>, GNU diff or <code>git diff</code>, and <code><a href="../reference/patch_apply.html">patch_apply()</a></code> applies one with exact context.</li>
+<li>On two versions of a text, lines that occur only on one side are set aside before the search, as GNU diff does, which keeps the script minimal and halves the time on typical edits; identical inputs skip the search.</li>
+<li>
 <code>diff_vec(algorithm = "patience")</code> aligns the elements that occur once on each side first, which keeps functions and blocks of text together.</li>
 <li>
 <code><a href="../reference/diff_edits.html">diff_edits()</a></code> lists its runs as 1-based starts and lengths, <code><a href="../reference/diff_edits.html">diff_identical()</a></code> says whether the inputs were equal, and <code><a href="../reference/diff_apply.html">diff_apply()</a></code> applies it.</li>

@@ -27,22 +27,26 @@ decisions marked (C) and its open questions (§15) are still open.
 
 ## Current state
 
-Scaffolded 2026-10-26 with `create-pkg.sh`. As of 2026-10-27,
-[`diff_vec()`](https://pedrobtz.github.io/zudiff/reference/diff_vec.md),
-[`diff_edits()`](https://pedrobtz.github.io/zudiff/reference/diff_edits.md),
-[`diff_identical()`](https://pedrobtz.github.io/zudiff/reference/diff_edits.md)
+Scaffolded 2026-10-26 with `create-pkg.sh`. As of 2026-10-27 the whole
+v0.1.0 API in design §5 works on Linux and macOS:
+[`diff_vec()`](https://pedrobtz.github.io/zudiff/reference/diff_vec.md)
 and
-[`diff_apply()`](https://pedrobtz.github.io/zudiff/reference/diff_apply.md)
-work, with linear-space Myers, GNU diff’s cost limit, patience diff and
-Ctrl-C in Goose (greedy Myers stays as the tests’ reference, algorithm
-9),
-[`diff_text()`](https://pedrobtz.github.io/zudiff/reference/diff_text.md),
+[`diff_text()`](https://pedrobtz.github.io/zudiff/reference/diff_text.md)
+(linear-space Myers with GNU diff’s cost limit and discarding, patience,
+Ctrl-C; greedy Myers stays as the tests’ reference, algorithm 9),
+[`diff_edits()`](https://pedrobtz.github.io/zudiff/reference/diff_edits.md),
+[`diff_identical()`](https://pedrobtz.github.io/zudiff/reference/diff_edits.md),
+[`diff_apply()`](https://pedrobtz.github.io/zudiff/reference/diff_apply.md),
 [`diff_hunks()`](https://pedrobtz.github.io/zudiff/reference/diff_hunks.md),
-[`diff_unified()`](https://pedrobtz.github.io/zudiff/reference/diff_unified.md)
-and printing; reading and applying patches is not built yet. The roadmap
-in `.agents/roadmap.md` takes it to v0.1.0. It is built by hand on
-`zugojson`’s pattern, independently of `zugoose` (design D1, revised
-2026-10-26).
+[`diff_unified()`](https://pedrobtz.github.io/zudiff/reference/diff_unified.md),
+printing,
+[`patch_parse()`](https://pedrobtz.github.io/zudiff/reference/patch_parse.md)
+and
+[`patch_apply()`](https://pedrobtz.github.io/zudiff/reference/patch_apply.md).
+Every design §10 target is met (`.agents/benchmarks.md`). Not built: the
+Windows runtime (Stage 7). The roadmap in `.agents/roadmap.md` takes it
+to v0.1.0. It is built by hand on `zugojson`’s pattern, independently of
+`zugoose` (design D1, revised 2026-10-26).
 
 ## Stage tracking
 
@@ -109,6 +113,7 @@ tools/regenerate.sh <goose-checkout>            # rewrite the generated C
 tools/regenerate.sh --verify <goose-checkout>   # what CI runs
 tools/check-symbols.sh <path>/zudiff.so         # forbidden-symbol check
 tools/run-benchmarks                            # design §10, installed pkg
+tools/run-sweep [pairs]                         # §12 round trip, 10^5 pairs
 ```
 
 ## Architecture
@@ -129,9 +134,13 @@ src/goose_r_runtime.{c,h} first-party runtime, copied from zugojson
 ```
 
 Every entry point runs its Goose call inside `goose_r_run()` and returns
-`list(value, error)`; `core_value()` raises a non-`NULL` error as a
-`zudiff_runtime_error`. Vectors reach Goose borrowed (`sl_i32` points
-into `INTEGER(x)`), never copied. `src/Makevars` compiles with
+its value, or the failure message as a string; `core_value()` raises a
+string as a `zudiff_runtime_error`. No entry point returns a string on
+success, so keep it that way or change the convention. Short calls use
+`goose_r_run()`; only diffs of 4096 elements or more use
+`goose_r_run_interruptible()`, which also catches Ctrl-C at two more
+`sigaction()` calls. Vectors reach Goose borrowed (`sl_i32` points into
+`INTEGER(x)`), never copied. `src/Makevars` compiles with
 `$(C_VISIBILITY)` and only `R_init_zudiff` is marked visible, which
 `test-abi.R` checks.
 
@@ -200,10 +209,20 @@ into `INTEGER(x)`), never copied. `src/Makevars` compiles with
   `helper-reference.R` is the O(NM) edit-distance reference and the
   greedy core; `helper-git.R` turns `git diff -U0` and a `zudiff` object
   into comparable change blocks; `helper-patch.R` applies a unified diff
-  with GNU `patch` or `git apply` and holds the text fixtures.
-- **Keep the suite inside the CRAN time budget.** About 34 s locally on
-  2026-10-27. The large sweeps run only where `ZUDIFF_EXHAUSTIVE=true`,
-  which the R CMD check caller sets and gctorture and valgrind do not.
+  with GNU `patch` or `git apply` and holds the text fixtures;
+  `helper-expect.R` holds `property()` and the round-trip checks.
+- **Property loops make one expectation.** One `expect_identical()`
+  costs several milliseconds, so a loop of thousands spent the suite’s
+  time in testthat. Check each case with
+  [`identical()`](https://rdrr.io/r/base/identical.html) through
+  `property()` (`helper-expect.R`), which lists the first failing cases.
+  Helpers go in `helper-*.R`, never at file scope: `shuffle = TRUE`
+  reorders tests within a file.
+- **Keep the suite inside the CRAN time budget.** About 30 s locally on
+  2026-10-27, most of it the O(NM) reference. The large sweeps run only
+  where `ZUDIFF_EXHAUSTIVE=true`, which the R CMD check caller sets and
+  gctorture and valgrind do not; `tools/run-sweep` runs design §12’s
+  10^5 round trips outside the suite.
 
 ## Definition of done
 

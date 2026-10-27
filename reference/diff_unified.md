@@ -1,7 +1,9 @@
 # Write a diff as a unified diff
 
 Writes the hunks of a diff in the unified format of GNU diff, which
-`patch` and `git apply` read.
+`patch`, `git apply` and
+[`patch_apply()`](https://pedrobtz.github.io/zudiff/reference/patch_apply.md)
+read.
 
 ## Usage
 

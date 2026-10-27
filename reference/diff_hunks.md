@@ -37,20 +37,20 @@ with the unchanged runs at its ends cut to the context.
 ``` r
 d <- diff_vec(1:20, c(1:4, 99L, 6:20))
 diff_hunks(d, context = 2)
-#> $`1`
-#> $`1`$old_start
+#> [[1]]
+#> [[1]]$old_start
 #> [1] 3
 #> 
-#> $`1`$old_len
+#> [[1]]$old_len
 #> [1] 5
 #> 
-#> $`1`$new_start
+#> [[1]]$new_start
 #> [1] 3
 #> 
-#> $`1`$new_len
+#> [[1]]$new_len
 #> [1] 5
 #> 
-#> $`1`$edits
+#> [[1]]$edits
 #>       op old_start old_len new_start new_len
 #> 1  equal         3       2         3       2
 #> 2 delete         5       1         5       0
