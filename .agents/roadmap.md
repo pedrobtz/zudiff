@@ -51,8 +51,10 @@ on the platforms the POSIX-only stages need.
   `OS_type: unix` and `SystemRequirements` as in `zugojson`, until Stage 7.
 - `R-CMD-check.yaml`: `runners` without Windows, as in `zugojson`, with a
   comment pointing at Stage 7.
-- Callers for the r-actions checks a compiled package needs in the full
-  profile: `gctorture.yml`, `valgrind.yml`, `sanitizers.yml`, `rchk.yml`.
+- ~~Callers for the r-actions checks a compiled package needs in the full
+  profile~~. Moved to Stage 1 on 2026-10-27: on the scaffold's C stub,
+  UBSan's check that the build was instrumented fails, because the stub has
+  nothing UBSan instruments. The checks arrive with the first real C.
 - Pin `coverage.yml` to a commit with the tag in a comment, since it holds
   a write token.
 - `zudiff_info()`, returning the package version; it gains the Goose pin
@@ -98,6 +100,9 @@ and the §10 baseline is recorded before any diff code exists.
 - `inst/COPYRIGHTS` and `inst/licenses/goose-LICENSE` (Apache-2.0), and
   the vendored code declared in `DESCRIPTION`.
 - `.covrignore` excluding the generated and vendored C.
+- `native-checks.yaml` from r-actions' example (sanitizers, valgrind, LTO,
+  gctorture, rchk, analyzers, cran-special), moved here from Stage 0, with
+  the generated and vendored C excluded where the workflows allow it.
 - `tests/testthat/test-abi.R`: the shared object exports `R_init_zudiff`
   only (design §9).
 - `tools/run-benchmarks` and `.agents/benchmarks.md` with the baseline:
