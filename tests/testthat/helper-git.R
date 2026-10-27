@@ -68,7 +68,7 @@ blocks_distance <- function(blocks) {
       n <- as.integer(regmatches(b, gregexpr("[0-9]+", b))[[1]])
       n[[2]] + n[[4]]
     },
-    0
+    0L
   ))
 }
 
@@ -89,4 +89,21 @@ c_fixture <- function() {
     old = c(fn("gamma"), fn("alpha")),
     new = c(fn("alpha"), fn("gamma"), fn("beta"))
   )
+}
+
+# git's own unified diff of two texts, written to files byte for byte.
+git_unified <- function(old, new, how = character()) {
+  fa <- withr::local_tempfile()
+  fb <- withr::local_tempfile()
+  writeBin(charToRaw(enc2utf8(old)), fa)
+  writeBin(charToRaw(enc2utf8(new)), fb)
+  out <- suppressWarnings(system2(
+    "git",
+    c("diff", "--no-index", "--no-color", how, fa, fb),
+    stdout = TRUE
+  ))
+  if (length(out) == 0L) {
+    return("")
+  }
+  paste0(paste0(out, collapse = "\n"), "\n")
 }

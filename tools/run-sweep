@@ -1,0 +1,44 @@
+#!/usr/bin/env Rscript
+# The full round-trip sweep of design §12: on 10^5 generated pairs across
+# every supported type, both algorithms and context 0 to 3,
+#
+#   diff_apply(old, d)                                    is new, and
+#   patch_apply(old, patch_parse(diff_unified(d)))        is new's text.
+#
+# The test suite runs 10^4 of these (test-patch.R); this runs the whole
+# 10^5, which takes minutes. Run from the package root against an
+# installed zudiff:
+#
+#   tools/run-sweep [pairs] [seed]
+
+suppressPackageStartupMessages(library(zudiff))
+args <- commandArgs(trailingOnly = TRUE)
+pairs <- if (length(args) >= 1) as.integer(args[[1]]) else 100000L
+seed <- if (length(args) >= 2) as.integer(args[[2]]) else 20261027L
+source("tests/testthat/helper-generate.R")
+
+set.seed(seed)
+started <- Sys.time()
+failures <- 0L
+for (i in seq_len(pairs)) {
+  type <- supported_types[[(i - 1L) %% length(supported_types) + 1L]]
+  p <- random_pair(type)
+  algorithm <- if (i %% 2L) "myers" else "patience"
+  d <- diff_vec(p$old, p$new, algorithm = algorithm)
+  got <- diff_apply(p$old, d)
+  ok <- if (is.factor(p$new)) identical(as.character(got), as.character(p$new)) else identical(got, p$new)
+  old <- paste0(zudiff:::as_lines(d, d$old), collapse = "")
+  new <- paste0(zudiff:::as_lines(d, d$new), collapse = "")
+  ok <- ok && identical(patch_apply(old, patch_parse(diff_unified(d, context = i %% 4L))), new)
+  if (!ok) {
+    failures <- failures + 1L
+    if (failures <= 5L) message(sprintf("pair %d (%s, %s) fails", i, type, algorithm))
+  }
+}
+elapsed <- as.numeric(difftime(Sys.time(), started, units = "secs"))
+cat(sprintf(
+  "%d pairs, seed %d: %d failures, %.0f s (zudiff %s, R %s)\n",
+  pairs, seed, failures, elapsed,
+  zudiff::zudiff_info()$version, getRversion()
+))
+quit(status = if (failures == 0L) 0L else 1L)
