@@ -21,6 +21,7 @@ jobs:
     # unordered_map keyed by strings, and libc++ and libstdc++ hash strings
     # differently. The committed C is generated on macOS (libc++), so the
     # check must run there too. Deterministic on either library.
+    # Reported upstream: https://github.com/aardappel/goose/issues/122
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
