@@ -13,12 +13,18 @@ int goose_r_run(void (*body)(void *), void *data, char *err, size_t errlen);
 
 /* goose_r_run(), also catching SIGINT while body runs: a Ctrl-C the Goose
    code notices through zudiff_check_interrupt() fails the call, which then
-   returns 2, and the signal is passed on to R's handler afterwards. For
-   calls long enough to need it; it costs two more sigaction() calls. */
+   returns 2. On POSIX the signal is passed on to R's handler afterwards; on
+   Windows R never sees the Ctrl-C, and a Ctrl-C the Goose code did not
+   notice returns 2 as well, so the caller must raise the interrupt. For
+   calls long enough to need it; it costs two more system calls. */
 int goose_r_run_interruptible(void (*body)(void *), void *data, char *err, size_t errlen);
 
 /* Bytes in use across all data stacks. Call outside goose_r_run(). */
 size_t goose_r_stack_used(void);
+
+/* Undoes what loading set up: on Windows, removes the fault handler, which
+   must not outlive the DLL. Called from R_unload_zudiff(). */
+void goose_r_unload(void);
 
 /* Test hook: the n-th interrupt poll of the next run raises SIGINT. */
 void goose_r_test_raise_after(long n);
