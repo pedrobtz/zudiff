@@ -7,11 +7,16 @@
 /* Runs body(data) with Goose's guard-page handler installed. Returns 0 on
    success. On a Goose runtime failure (bounds check, abort, data stack
    overflow) it restores every data stack to where it was before the call,
-   copies the message into err and returns 1. body must not call R's API:
+   copies the message into err and returns 1, or 2 if the failure was a
+   Ctrl-C the Goose code noticed (zudiff_check_interrupt()). SIGINT is
+   caught only while body runs. body must not call R's API:
    an R error raised inside it would skip the restore. */
 int goose_r_run(void (*body)(void *), void *data, char *err, size_t errlen);
 
 /* Bytes in use across all data stacks. Call outside goose_r_run(). */
 size_t goose_r_stack_used(void);
+
+/* Test hook: the n-th interrupt poll of the next run raises SIGINT. */
+void goose_r_test_raise_after(long n);
 
 #endif

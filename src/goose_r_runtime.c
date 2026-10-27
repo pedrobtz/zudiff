@@ -8,6 +8,11 @@
    for the same Goose pin. Changes from that copy, newest last:
    - goose_r_stack_used(), so the tests can check that a failure rewinds
      the data stacks (2026-10-27).
+   - Ctrl-C (2026-10-27): a SIGINT handler, installed only while Goose
+     code runs, sets a flag; zudiff_check_interrupt(), which the Goose code
+     polls, then fails the call, and goose_r_run() returns 2 so the glue
+     can raise the interrupt in R. goose_r_test_raise_after() raises a real
+     SIGINT from inside a run, for the tests. Mirrors RFC 0044 §6.2.
 
    Differences from the stock runtime (goose src/runtime/runtime_impl.h):
    - Nothing ends the process. Every runtime failure jumps back to
@@ -72,6 +77,12 @@ static size_t region_usable, region_gap;
 
 static sigjmp_buf *active_jump;
 static char failure[512];
+
+/* Ctrl-C while Goose runs: the handler only sets the flag; the Goose code
+   polls it through zudiff_check_interrupt(). */
+static volatile sig_atomic_t interrupt_pending;
+static int interrupt_failed;
+static long raise_after;
 
 static GS_NORETURN void gs_r_fail(const char *fmt, ...) {
     va_list ap;
@@ -160,6 +171,25 @@ GS_API GS_NORETURN void gs_asfail_f(const char *why, double d, int f32, const ch
     gs_r_fail("%g as %s: %s (%s:%d)", d, type, why, file, line);
 }
 
+/* --- interrupts ---------------------------------------------------------- */
+
+GS_API void zudiff_check_interrupt(void) {
+    if (raise_after > 0 && --raise_after == 0) raise(SIGINT);
+    if (interrupt_pending) {
+        interrupt_pending = 0;
+        interrupt_failed = 1;
+        gs_r_fail("interrupted");
+    }
+}
+
+/* Test hook: the n-th poll of the next run raises SIGINT. */
+void goose_r_test_raise_after(long n) { raise_after = n; }
+
+static void interrupt_handler(int sig) {
+    (void)sig;
+    interrupt_pending = 1;
+}
+
 /* --- start-up and regions ------------------------------------------------ */
 
 GS_API void gs_rt_start(int argc, char **argv, uint64_t reserve, uint64_t gap,
@@ -197,7 +227,7 @@ GS_API uint8_t *gs_reserve_region(gs_stack *stack) {
 
 /* --- running Goose code -------------------------------------------------- */
 
-static struct sigaction prev_segv, prev_bus;
+static struct sigaction prev_segv, prev_bus, prev_int;
 
 static void fault_handler(int sig, siginfo_t *info, void *ctx) {
     (void)ctx;
@@ -228,6 +258,13 @@ int goose_r_run(void (*body)(void *), void *data, char *err, size_t errlen) {
 #ifdef SIGBUS
     sigaction(SIGBUS, &sa, &prev_bus);
 #endif
+    struct sigaction si;
+    memset(&si, 0, sizeof si);
+    si.sa_handler = interrupt_handler;
+    sigemptyset(&si.sa_mask);
+    sigaction(SIGINT, &si, &prev_int);
+    interrupt_pending = 0;
+    interrupt_failed = 0;
 
     int failed = 0;
     if (sigsetjmp(jump, 1) == 0) {
@@ -240,13 +277,22 @@ int goose_r_run(void (*body)(void *), void *data, char *err, size_t errlen) {
         for (i = 0; i < nregions; i++)
             if (regions[i].saved) regions[i].stack->top = regions[i].saved;
         if (err && errlen) snprintf(err, errlen, "%s", failure);
+        if (interrupt_failed) failed = 2;
     }
     active_jump = outer;
+    raise_after = 0;
 
+    sigaction(SIGINT, &prev_int, NULL);
     sigaction(SIGSEGV, &prev_segv, NULL);
 #ifdef SIGBUS
     sigaction(SIGBUS, &prev_bus, NULL);
 #endif
+    /* A Ctrl-C during the run goes on to R's own handler, now back in
+       place, whether the Goose code noticed it or not. */
+    if (interrupt_pending || failed == 2) {
+        interrupt_pending = 0;
+        raise(SIGINT);
+    }
     return failed;
 }
 
