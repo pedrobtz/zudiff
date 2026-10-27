@@ -25,7 +25,8 @@ BugReports: https://github.com/pedrobtz/zudiff/issues
 Depends:
     R (>= 4.1)
 Suggests:
-    testthat (>= 3.0.0)
+    testthat (>= 3.0.0),
+    withr
 SystemRequirements: A C99 compiler. POSIX memory mapping and signals
     (mmap, mprotect, sigaction); Windows is not supported yet.
 OS_type: unix
