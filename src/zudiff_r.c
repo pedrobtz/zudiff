@@ -76,7 +76,11 @@ SEXP zudiff_c_diff(SEXP a, SEXP b, SEXP algorithm, SEXP max_cost) {
     c.ib.len = (int64_t) XLENGTH(b);
   }
   c.algorithm = (int32_t) Rf_asInteger(algorithm);
-  c.max_cost = (int64_t) Rf_asReal(max_cost);
+  /* Inf, NaN or anything past int64's range means no limit; converting
+     such a double to int64_t directly is undefined behaviour. */
+  double mc = Rf_asReal(max_cost);
+  c.max_cost = (ISNAN(mc) || mc >= 9223372036854775807.0) ? INT64_MAX
+               : mc < 0 ? 0 : (int64_t) mc;
   char err[ERRLEN];
   if (goose_r_run(diff_body, &c, err, sizeof err))
     return result(R_NilValue, err);
