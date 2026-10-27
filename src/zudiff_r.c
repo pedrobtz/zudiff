@@ -11,6 +11,7 @@
    zudiff_runtime_error (R/core.R). */
 
 #include <stdint.h>
+#include <string.h>
 
 #define R_NO_REMAP
 #include <R.h>
@@ -35,6 +36,55 @@ static SEXP result(SEXP value, const char *err) {
   if (err) SET_VECTOR_ELT(out, 1, Rf_mkString(err));
   UNPROTECT(2);
   return out;
+}
+
+/* --- diffs ---------------------------------------------------------------- */
+
+typedef struct {
+  int bytes;
+  sl_i32 ia, ib;
+  sl_u8 ba, bb;
+  int32_t algorithm;
+  int64_t max_cost, n;
+  const uint8_t *out;
+} diff_call;
+
+static void diff_body(void *p) {
+  diff_call *c = p;
+  if (c->bytes)
+    c->out = zudiff_diff_bytes(c->ba, c->bb, c->algorithm, c->max_cost, &c->n);
+  else
+    c->out = zudiff_diff_ids(c->ia, c->ib, c->algorithm, c->max_cost, &c->n);
+}
+
+/* a and b are both integer or both raw vectors, checked in R, each shorter
+   than 2^31. They are borrowed, not copied. The packed script is copied
+   into a raw vector after the run, since Goose reuses its memory. */
+SEXP zudiff_c_diff(SEXP a, SEXP b, SEXP algorithm, SEXP max_cost) {
+  diff_call c;
+  memset(&c, 0, sizeof c);
+  c.bytes = TYPEOF(a) == RAWSXP;
+  if (c.bytes) {
+    c.ba.data = RAW(a);
+    c.ba.len = (int64_t) XLENGTH(a);
+    c.bb.data = RAW(b);
+    c.bb.len = (int64_t) XLENGTH(b);
+  } else {
+    c.ia.data = INTEGER(a);
+    c.ia.len = (int64_t) XLENGTH(a);
+    c.ib.data = INTEGER(b);
+    c.ib.len = (int64_t) XLENGTH(b);
+  }
+  c.algorithm = (int32_t) Rf_asInteger(algorithm);
+  c.max_cost = (int64_t) Rf_asReal(max_cost);
+  char err[ERRLEN];
+  if (goose_r_run(diff_body, &c, err, sizeof err))
+    return result(R_NilValue, err);
+  SEXP out = PROTECT(Rf_allocVector(RAWSXP, (R_xlen_t) c.n));
+  if (c.n > 0) memcpy(RAW(out), c.out, (size_t) c.n);
+  SEXP res = result(out, NULL);
+  UNPROTECT(1);
+  return res;
 }
 
 /* --- test hooks --------------------------------------------------------- */
@@ -118,6 +168,7 @@ static void init_body(void *unused) {
 }
 
 static const R_CallMethodDef call_methods[] = {
+    {"zudiff_c_diff", (DL_FUNC) &zudiff_c_diff, 4},
     {"zudiff_c_probe_index", (DL_FUNC) &zudiff_c_probe_index, 1},
     {"zudiff_c_probe_sum", (DL_FUNC) &zudiff_c_probe_sum, 1},
     {"zudiff_c_probe_stack", (DL_FUNC) &zudiff_c_probe_stack, 2},
