@@ -1,0 +1,30 @@
+#!/bin/sh
+# Builds tools/wine/harness.c with the runtime and the generated core for
+# Windows (MinGW-w64) and runs it under Wine, in an Ubuntu container: the
+# Windows half of src/goose_r_runtime.c, tested without R and without a
+# Windows machine. Needs podman or docker.
+#
+#   tools/wine/run
+
+set -eu
+pkg=$(cd "$(dirname "$0")/../.." && pwd)
+engine=$(command -v podman || command -v docker) || {
+  echo "needs podman or docker" >&2
+  exit 1
+}
+# A copy of R's headers: a container VM (podman on macOS) may not see where
+# R keeps them.
+rinclude=$(mktemp -d)
+trap 'rm -rf "$rinclude"' EXIT
+cp -R "$(Rscript -e 'cat(R.home("include"))')/." "$rinclude"
+"$engine" run --rm -v "$pkg/src:/src:ro" -v "$pkg/tools/wine:/wine:ro" \
+  -v "$rinclude:/rinclude:ro" docker.io/library/ubuntu:24.04 sh -c '
+  export DEBIAN_FRONTEND=noninteractive
+  apt-get update -qq >/dev/null
+  apt-get install -y -qq gcc-mingw-w64-x86-64 wine64 >/dev/null 2>&1
+  cd /tmp
+  x86_64-w64-mingw32-gcc -std=gnu11 -O2 -DGOOSE_R_TEST -I/src -I/rinclude \
+    -o harness.exe /wine/harness.c /src/goose_r_runtime.c \
+    /src/zudiff_goose.c /src/goose_vendor.c
+  WINEDEBUG=-all wine harness.exe 2>&1 | grep -v "^wine:"
+'
