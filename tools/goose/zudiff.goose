@@ -113,6 +113,75 @@ fn build_runs() -> i64 {
     return dist;
 }
 
+// --- snakes --------------------------------------------------------------
+//
+// The hot loops: follow equal elements forward from (x, y), or backward to
+// (x, y), and return where the run ends in old. They are checkfree, so the
+// compiler must prove every index in range rather than check it per
+// element; the explicit bounds against a.len and b.len are what it proves
+// them from, and cost nothing next to the checks they replace.
+
+// Most snakes end at once, so a few elements are compared one by one
+// first; a run that survives them is followed CHUNK elements at a time
+// with slice equality (memcmp), and finished one by one.
+let CHUNK: i64 = 64;
+
+checkfree fn snake_fwd(a, b, x0: i64, y0: i64, xlim: i64, ylim: i64) -> i64 {
+    var x = x0;
+    var y = y0;
+    var k: i64 = 0;
+    while k < 4 && x >= 0 && y >= 0 && x < xlim && y < ylim && x < a.len && y < b.len && a[x] == b[y] {
+        x++;
+        y++;
+        k++;
+    }
+    if k < 4 { return x; }
+    while x >= 0 && y >= 0 {
+        let xe = x + CHUNK;
+        let ye = y + CHUNK;
+        if x > xe || y > ye || xe > xlim || ye > ylim || xe > a.len || ye > b.len { break; }
+        if a[x..xe] != b[y..ye] { break; }
+        x = xe;
+        y = ye;
+    }
+    while x >= 0 && y >= 0 && x < xlim && y < ylim && x < a.len && y < b.len && a[x] == b[y] {
+        x++;
+        y++;
+    }
+    return x;
+}
+
+checkfree fn snake_bwd(a, b, x0: i64, y0: i64, xoff: i64, yoff: i64) -> i64 {
+    var x = x0;
+    var y = y0;
+    var k: i64 = 0;
+    while k < 4 && x > xoff && y > yoff && x > 0 && y > 0 && x <= a.len && y <= b.len {
+        let i = x - 1;
+        let j = y - 1;
+        if a[i] != b[j] { return x; }
+        x = i;
+        y = j;
+        k++;
+    }
+    if k < 4 { return x; }
+    while x <= a.len && y <= b.len {
+        let xs = x - CHUNK;
+        let ys = y - CHUNK;
+        if xs < xoff || ys < yoff || xs < 0 || ys < 0 || xs > x || ys > y { break; }
+        if a[xs..x] != b[ys..y] { break; }
+        x = xs;
+        y = ys;
+    }
+    while x > xoff && y > yoff && x > 0 && y > 0 && x <= a.len && y <= b.len {
+        let i = x - 1;
+        let j = y - 1;
+        if a[i] != b[j] { break; }
+        x = i;
+        y = j;
+    }
+    return x;
+}
+
 // --- greedy Myers, the test reference ------------------------------------
 
 var trace: i32[>..] = [];   // V snapshots, d(d+1)/2 + (k+d)/2
@@ -142,7 +211,8 @@ fn myers_greedy(a, b) {
                 x = v[max + k - 1] + 1;
             }
             var y = x - k;
-            while x < n && y < m && a[x] == b[y] { x++; y++; }
+            x = snake_fwd(a, b, x, y, n, m);
+            y = x - k;
             v[max + k] = x as i32;
             if x >= n && y >= m { dist = d; }
             k += 2;
@@ -220,7 +290,8 @@ fn diag(a, b, off: i64, xoff: i64, xlim: i64, yoff: i64, ylim: i64, find_minimal
             var x: i64 = thi;
             if tlo >= thi { x = tlo + 1; }
             var y = x - d;
-            while x < xlim && y < ylim && a[x] == b[y] { x++; y++; }
+            x = snake_fwd(a, b, x, y, xlim, ylim);
+            y = x - d;
             fd[off + d] = x as i32;
             if odd && bmin <= d && d <= bmax && bd[off + d] <= x {
                 return Part { xmid: x, ymid: y, lo_minimal: true, hi_minimal: true };
@@ -237,7 +308,8 @@ fn diag(a, b, off: i64, xoff: i64, xlim: i64, yoff: i64, ylim: i64, find_minimal
             var x: i64 = thi - 1;
             if tlo < thi { x = tlo; }
             var y = x - d;
-            while xoff < x && yoff < y && a[x - 1] == b[y - 1] { x--; y--; }
+            x = snake_bwd(a, b, x, y, xoff, yoff);
+            y = x - d;
             bd[off + d] = x as i32;
             if !odd && fmin <= d && d <= fmax && x <= fd[off + d] {
                 return Part { xmid: x, ymid: y, lo_minimal: true, hi_minimal: true };
@@ -312,10 +384,14 @@ fn run_tasks(a, b, too_expensive: i64) {
         var yoff: i64 = t.yoff;
         var ylim: i64 = t.ylim;
         let x0 = xoff;
-        while xoff < xlim && yoff < ylim && a[xoff] == b[yoff] { xoff++; yoff++; }
+        let xs = snake_fwd(a, b, xoff, yoff, xlim, ylim);
+        yoff += xs - xoff;
+        xoff = xs;
         let pre = xoff - x0;
         let x1 = xlim;
-        while xoff < xlim && yoff < ylim && a[xlim - 1] == b[ylim - 1] { xlim--; ylim--; }
+        let xe = snake_bwd(a, b, xlim, ylim, xoff, yoff);
+        ylim -= xlim - xe;
+        xlim = xe;
         let suf = x1 - xlim;
         // Last in, first out: push what comes last first.
         push_moves(OP_EQUAL, suf);
@@ -415,6 +491,72 @@ fn patience_step(a, b, xoff: i64, xlim: i64, yoff: i64, ylim: i64, too_expensive
     push_patience(xoff, hx, yoff, hy);
 }
 
+// --- discarding unmatched elements ---------------------------------------
+//
+// An element that occurs nowhere in the other sequence can be in no common
+// subsequence, so a minimal script deletes or inserts it whatever else
+// happens. GNU diff drops such lines before its search (discard_confusing_
+// lines, the part of it that keeps minimality) and puts them back after.
+// The search then sees only elements that can match: on two versions of a
+// file, where most changed lines are new, far fewer edits.
+
+var ka: i32[>..] = [];      // kept elements of old, compacted
+var kb: i32[>..] = [];
+var pa: i32[>..] = [];      // their positions in old
+var pb: i32[>..] = [];
+var csteps: Step[>..] = []; // the moves over the compacted sequences
+
+// ids is the number of distinct values an element can take.
+fn myers_discarding(a, b, too_expensive: i64, ids: i64) {
+    cnta.resize(ids, 0);
+    cntb.resize(ids, 0);
+    for x in a { cnta[x] += 1; }
+    for y in b { cntb[y] += 1; }
+    // Count first: when nothing can be dropped, as with bytes nearly
+    // always, compacting would only copy both inputs.
+    var dropped: i64 = 0;
+    for x in a { if cntb[x] == 0 { dropped++; } }
+    for y in b { if cnta[y] == 0 { dropped++; } }
+    if dropped == 0 {
+        push_range(0, a.len, 0, b.len, too_expensive == NO_LIMIT);
+        run_tasks(a, b, too_expensive);
+        return;
+    }
+    for x, i in a {
+        if cntb[x] > 0 { ka.push(x); pa.push(i as i32); }
+    }
+    for y, j in b {
+        if cnta[y] > 0 { kb.push(y); pb.push(j as i32); }
+    }
+    push_range(0, ka.len, 0, kb.len, too_expensive == NO_LIMIT);
+    run_tasks(ka, kb, too_expensive);
+    // Back to the original positions: between two equal elements, whatever
+    // old and new hold is deleted and inserted.
+    for s in steps { csteps.push(s); }
+    steps.clear();
+    var ci: i64 = 0;
+    var cj: i64 = 0;
+    var oi: i64 = 0;
+    var oj: i64 = 0;
+    for s in csteps {
+        if s.op == OP_DELETE { ci += s.len; continue; }
+        if s.op == OP_INSERT { cj += s.len; continue; }
+        for e in s.len {
+            let x: i64 = pa[ci + e];
+            let y: i64 = pb[cj + e];
+            step(OP_DELETE, x - oi);
+            step(OP_INSERT, y - oj);
+            step(OP_EQUAL, 1);
+            oi = x + 1;
+            oj = y + 1;
+        }
+        ci += s.len;
+        cj += s.len;
+    }
+    step(OP_DELETE, a.len - oi);
+    step(OP_INSERT, b.len - oj);
+}
+
 // GNU diff's default cost limit: about the square root of the input size,
 // a power of two, and at least 4096 (diffutils src/analyze.c).
 fn default_cost(n: i64, m: i64) -> i64 {
@@ -426,7 +568,8 @@ fn default_cost(n: i64, m: i64) -> i64 {
     return cost;
 }
 
-fn diff(a, b, algorithm: i32, max_cost: i64) -> const u8[:] {
+// ids bounds the element values: N + M + 1 for match() ids, 256 for bytes.
+fn diff(a, b, algorithm: i32, max_cost: i64, ids: i64) -> const u8[:] {
     steps.clear();
     runs.clear();
     out.clear();
@@ -444,6 +587,11 @@ fn diff(a, b, algorithm: i32, max_cost: i64) -> const u8[:] {
     prev.clear();
     tops.clear();
     keep.clear();
+    ka.clear();
+    kb.clear();
+    pa.clear();
+    pb.clear();
+    csteps.clear();
     polls = 0;
     minimal = true;
     if algorithm == ALGORITHM_GREEDY {
@@ -452,19 +600,16 @@ fn diff(a, b, algorithm: i32, max_cost: i64) -> const u8[:] {
         var cost = max_cost;
         if cost < 0 { cost = default_cost(a.len, b.len); }
         if algorithm == ALGORITHM_PATIENCE {
-            // Ids are below N + M + 1, bytes below 256.
-            var k = a.len + b.len + 1;
-            if k < 256 { k = 256; }
-            cnta.resize(k, 0);
-            cntb.resize(k, 0);
-            posb.resize(k, 0);
+            cnta.resize(ids, 0);
+            cntb.resize(ids, 0);
+            posb.resize(ids, 0);
             push_patience(0, a.len, 0, b.len);
             // Patience is not minimal in general (design §6.4).
             minimal = false;
+            run_tasks(a, b, cost);
         } else {
-            push_range(0, a.len, 0, b.len, cost == NO_LIMIT);
+            myers_discarding(a, b, cost, ids);
         }
-        run_tasks(a, b, cost);
     }
     let dist = build_runs();
     put_i32(FORMAT_VERSION);
@@ -491,11 +636,11 @@ fn diff(a, b, algorithm: i32, max_cost: i64) -> const u8[:] {
 // Myers, 1 for patience and 9 for the greedy reference; max_cost is the cost limit, -1 for
 // the default and NO_LIMIT for a minimal script.
 export fn zudiff_diff_ids(a: const i32[:], b: const i32[:], algorithm: i32, max_cost: i64) -> const u8[:] {
-    return diff(a, b, algorithm, max_cost);
+    return diff(a, b, algorithm, max_cost, a.len + b.len + 1);
 }
 
 export fn zudiff_diff_bytes(a: const u8[:], b: const u8[:], algorithm: i32, max_cost: i64) -> const u8[:] {
-    return diff(a, b, algorithm, max_cost);
+    return diff(a, b, algorithm, max_cost, 256);
 }
 
 // Test hook: a bounds-check failure on demand, so the tests can exercise

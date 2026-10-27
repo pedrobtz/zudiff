@@ -8,11 +8,15 @@
    for the same Goose pin. Changes from that copy, newest last:
    - goose_r_stack_used(), so the tests can check that a failure rewinds
      the data stacks (2026-10-27).
-   - Ctrl-C (2026-10-27): a SIGINT handler, installed only while Goose
-     code runs, sets a flag; zudiff_check_interrupt(), which the Goose code
+   - Ctrl-C (2026-10-27): goose_r_run_interruptible() installs a SIGINT
+     handler while Goose code runs, which sets a flag; zudiff_check_interrupt(), which the Goose code
      polls, then fails the call, and goose_r_run() returns 2 so the glue
      can raise the interrupt in R. goose_r_test_raise_after() raises a real
      SIGINT from inside a run, for the tests. Mirrors RFC 0044 §6.2.
+     goose_r_run() itself does not touch SIGINT, as in zugojson: the two
+     sigaction() calls cost about a microsecond, a third of an empty call.
+     A Ctrl-C during it reaches R's own handler and R acts on it after the
+     call returns.
 
    Differences from the stock runtime (goose src/runtime/runtime_impl.h):
    - Nothing ends the process. Every runtime failure jumps back to
@@ -242,7 +246,7 @@ static void fault_handler(int sig, siginfo_t *info, void *ctx) {
     sigaction(sig, sig == SIGSEGV ? &prev_segv : &prev_bus, NULL);
 }
 
-int goose_r_run(void (*body)(void *), void *data, char *err, size_t errlen) {
+static int run(void (*body)(void *), void *data, char *err, size_t errlen, int catch_int) {
     sigjmp_buf jump;
     sigjmp_buf *outer = active_jump;
     struct sigaction sa;
@@ -258,11 +262,13 @@ int goose_r_run(void (*body)(void *), void *data, char *err, size_t errlen) {
 #ifdef SIGBUS
     sigaction(SIGBUS, &sa, &prev_bus);
 #endif
-    struct sigaction si;
-    memset(&si, 0, sizeof si);
-    si.sa_handler = interrupt_handler;
-    sigemptyset(&si.sa_mask);
-    sigaction(SIGINT, &si, &prev_int);
+    if (catch_int) {
+        struct sigaction si;
+        memset(&si, 0, sizeof si);
+        si.sa_handler = interrupt_handler;
+        sigemptyset(&si.sa_mask);
+        sigaction(SIGINT, &si, &prev_int);
+    }
     interrupt_pending = 0;
     interrupt_failed = 0;
 
@@ -282,18 +288,26 @@ int goose_r_run(void (*body)(void *), void *data, char *err, size_t errlen) {
     active_jump = outer;
     raise_after = 0;
 
-    sigaction(SIGINT, &prev_int, NULL);
+    if (catch_int) sigaction(SIGINT, &prev_int, NULL);
     sigaction(SIGSEGV, &prev_segv, NULL);
 #ifdef SIGBUS
     sigaction(SIGBUS, &prev_bus, NULL);
 #endif
     /* A Ctrl-C during the run goes on to R's own handler, now back in
        place, whether the Goose code noticed it or not. */
-    if (interrupt_pending || failed == 2) {
+    if (catch_int && (interrupt_pending || failed == 2)) {
         interrupt_pending = 0;
         raise(SIGINT);
     }
     return failed;
+}
+
+int goose_r_run(void (*body)(void *), void *data, char *err, size_t errlen) {
+    return run(body, data, err, errlen, 0);
+}
+
+int goose_r_run_interruptible(void (*body)(void *), void *data, char *err, size_t errlen) {
+    return run(body, data, err, errlen, 1);
 }
 
 /* Bytes in use across all data stacks, for the tests: after any call,
