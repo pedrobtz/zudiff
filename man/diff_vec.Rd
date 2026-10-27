@@ -4,14 +4,20 @@
 \alias{diff_vec}
 \title{Diff two vectors}
 \usage{
-diff_vec(old, new, algorithm = "myers", max_cost = NULL)
+diff_vec(old, new, algorithm = c("myers", "patience"), max_cost = NULL)
 }
 \arguments{
 \item{old, new}{Two vectors of the same type: logical, integer, double,
 complex, character or raw. A factor counts as a character vector of its
 labels.}
 
-\item{algorithm}{The diff algorithm. Only \code{"myers"} for now.}
+\item{algorithm}{The diff algorithm: \code{"myers"}, the default, or
+\code{"patience"}. Myers finds a shortest edit script. Patience first
+aligns the elements that occur exactly once on each side, then diffs
+the stretches between them, with Myers where a stretch has no such
+element. On text it keeps functions and blocks aligned where Myers
+may match stray braces and blank lines instead. Its scripts are not
+minimal in general, and the result always records \code{minimal = FALSE}.}
 
 \item{max_cost}{The cost limit of Myers' search, which trades
 minimality for time. \code{NULL}, the default, follows GNU diff: about the
