@@ -20,6 +20,9 @@
 //   splits at the furthest point either direction reached, as GNU diff
 //   does, and the script is no longer minimal. Subproblems go on an
 //   explicit task stack rather than the C stack.
+// - patience (algorithm 1, design §6.4): elements unique to a stretch on
+//   both sides anchor it, the longest increasing run of anchors fixes the
+//   alignment, and stretches with no anchors fall back to Myers.
 // - greedy (§3, algorithm 9), one snapshot of the furthest-reaching
 //   diagonals per edit step, O(D^2) memory. It is the tests' reference.
 
@@ -29,6 +32,7 @@ let OP_EQUAL: i32 = 0;
 let OP_DELETE: i32 = 1;
 let OP_INSERT: i32 = 2;
 let FORMAT_VERSION: i32 = 1;
+let ALGORITHM_PATIENCE: i32 = 1;
 let ALGORITHM_GREEDY: i32 = 9;
 let NO_LIMIT: i64 = 9223372036854775807;
 let FAR: i32 = 2147483647;
@@ -285,17 +289,22 @@ fn push_moves(op: i32, len: i64) {
     }
 }
 
-fn myers_linear(a, b, too_expensive: i64) {
+// Runs the task stack until it is empty: kind 0 is a Myers stretch,
+// kind 1 a run of moves, kind 2 a patience stretch.
+fn run_tasks(a, b, too_expensive: i64) {
     let n = a.len;
     let m = b.len;
     let off = m + 1;
     fd.resize(n + m + 3, 0);
     bd.resize(n + m + 3, 0);
-    push_range(0, n, 0, m, too_expensive == NO_LIMIT);
     while tasks.len > 0 {
         let t = tasks.pop();
         if t.kind == 1 {
             step(t.xoff, t.xlim);
+            continue;
+        }
+        if t.kind == 2 {
+            patience_step(a, b, t.xoff, t.xlim, t.yoff, t.ylim, too_expensive);
             continue;
         }
         var xoff: i64 = t.xoff;
@@ -323,6 +332,89 @@ fn myers_linear(a, b, too_expensive: i64) {
     }
 }
 
+// --- patience diff --------------------------------------------------------
+
+// Occurrence counts and last positions per id, over one stretch of each
+// side. Ids are below max(N + M + 1, 256), so these are flat arrays. Only
+// the entries a stretch touched are reset after it.
+var cnta: i32[>..] = [];
+var cntb: i32[>..] = [];
+var posb: i32[>..] = [];
+
+// The anchors of one stretch, in old order, and the patience-sorting state
+// that finds their longest increasing subsequence in new order.
+var anc_x: i32[>..] = [];
+var anc_y: i32[>..] = [];
+var prev: i32[>..] = [];   // the anchor before this one in its best chain
+var tops: i32[>..] = [];   // per pile, the anchor on top
+var keep: i32[>..] = [];   // the chosen anchors, last first
+
+fn push_patience(xoff: i64, xlim: i64, yoff: i64, ylim: i64) {
+    tasks.push(Task { kind: 2, xoff: xoff as i32, xlim: xlim as i32, yoff: yoff as i32, ylim: ylim as i32, find_minimal: false });
+}
+
+// One stretch: elements unique to it on both sides become anchors, the
+// longest run of anchors in order on both sides fixes the alignment, and
+// each gap between chosen anchors is diffed the same way. A stretch with
+// no anchors is diffed with Myers, under the same cost limit.
+fn patience_step(a, b, xoff: i64, xlim: i64, yoff: i64, ylim: i64, too_expensive: i64) {
+    poll();
+    for i in xoff..xlim { cnta[a[i]] += 1; }
+    for j in yoff..ylim {
+        cntb[b[j]] += 1;
+        posb[b[j]] = j as i32;
+    }
+    anc_x.clear();
+    anc_y.clear();
+    for i in xoff..xlim {
+        let id = a[i];
+        if cnta[id] == 1 && cntb[id] == 1 {
+            anc_x.push(i as i32);
+            anc_y.push(posb[id]);
+        }
+    }
+    for i in xoff..xlim { cnta[a[i]] = 0; }
+    for j in yoff..ylim { cntb[b[j]] = 0; }
+    if anc_x.len == 0 {
+        push_range(xoff, xlim, yoff, ylim, too_expensive == NO_LIMIT);
+        return;
+    }
+    // Patience sorting: each anchor goes on the leftmost pile whose top has
+    // a larger new position, linked to the top of the pile before it.
+    prev.clear();
+    tops.clear();
+    for k in anc_y.len {
+        let y = anc_y[k];
+        var lo: i64 = 0;
+        var hi: i64 = tops.len;
+        while lo < hi {
+            let mid = (lo + hi) / 2;
+            if anc_y[tops[mid]] < y { lo = mid + 1; } else { hi = mid; }
+        }
+        if lo > 0 { prev.push(tops[lo - 1]); } else { prev.push(-1); }
+        if lo == tops.len { tops.push(k as i32); } else { tops[lo] = k as i32; }
+    }
+    keep.clear();
+    var k: i64 = tops[tops.len - 1];
+    while k >= 0 {
+        keep.push(k as i32);
+        k = prev[k];
+    }
+    // keep is last anchor first, which is the order the task stack wants:
+    // the gap after the last anchor is pushed first.
+    var hx = xlim;
+    var hy = ylim;
+    for c in keep {
+        let ax: i64 = anc_x[c];
+        let ay: i64 = anc_y[c];
+        push_patience(ax + 1, hx, ay + 1, hy);
+        push_moves(OP_EQUAL, 1);
+        hx = ax;
+        hy = ay;
+    }
+    push_patience(xoff, hx, yoff, hy);
+}
+
 // GNU diff's default cost limit: about the square root of the input size,
 // a power of two, and at least 4096 (diffutils src/analyze.c).
 fn default_cost(n: i64, m: i64) -> i64 {
@@ -344,6 +436,14 @@ fn diff(a, b, algorithm: i32, max_cost: i64) -> const u8[:] {
     fd.clear();
     bd.clear();
     tasks.clear();
+    cnta.clear();
+    cntb.clear();
+    posb.clear();
+    anc_x.clear();
+    anc_y.clear();
+    prev.clear();
+    tops.clear();
+    keep.clear();
     polls = 0;
     minimal = true;
     if algorithm == ALGORITHM_GREEDY {
@@ -351,7 +451,20 @@ fn diff(a, b, algorithm: i32, max_cost: i64) -> const u8[:] {
     } else {
         var cost = max_cost;
         if cost < 0 { cost = default_cost(a.len, b.len); }
-        myers_linear(a, b, cost);
+        if algorithm == ALGORITHM_PATIENCE {
+            // Ids are below N + M + 1, bytes below 256.
+            var k = a.len + b.len + 1;
+            if k < 256 { k = 256; }
+            cnta.resize(k, 0);
+            cntb.resize(k, 0);
+            posb.resize(k, 0);
+            push_patience(0, a.len, 0, b.len);
+            // Patience is not minimal in general (design §6.4).
+            minimal = false;
+        } else {
+            push_range(0, a.len, 0, b.len, cost == NO_LIMIT);
+        }
+        run_tasks(a, b, cost);
     }
     let dist = build_runs();
     put_i32(FORMAT_VERSION);
@@ -375,7 +488,7 @@ fn diff(a, b, algorithm: i32, max_cost: i64) -> const u8[:] {
 
 // The diff of two vectors of integer ids, and of two byte vectors. Inputs
 // are at most 2^31 - 1 long together, checked in R. algorithm is 0 for
-// Myers and 9 for the greedy reference; max_cost is the cost limit, -1 for
+// Myers, 1 for patience and 9 for the greedy reference; max_cost is the cost limit, -1 for
 // the default and NO_LIMIT for a minimal script.
 export fn zudiff_diff_ids(a: const i32[:], b: const i32[:], algorithm: i32, max_cost: i64) -> const u8[:] {
     return diff(a, b, algorithm, max_cost);
