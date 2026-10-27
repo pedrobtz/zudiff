@@ -28,7 +28,7 @@ then.
 | 2 | [Greedy Myers and diff_vec()](#stage-2--greedy-myers-and-diff_vec) | quick | [#4](https://github.com/pedrobtz/zudiff/issues/4) | [#16](https://github.com/pedrobtz/zudiff/pull/16) | 2026-10-27 |
 | 3 | [Linear space, cost limit and interrupts](#stage-3--linear-space-cost-limit-and-interrupts) | quick | [#5](https://github.com/pedrobtz/zudiff/issues/5) | [#17](https://github.com/pedrobtz/zudiff/pull/17) | 2026-10-27 |
 | 4 | [Patience diff](#stage-4--patience-diff) | quick | [#6](https://github.com/pedrobtz/zudiff/issues/6) | [#18](https://github.com/pedrobtz/zudiff/pull/18) | 2026-10-27 |
-| 5 | [Text, hunks and unified output](#stage-5--text-hunks-and-unified-output) | quick | [#7](https://github.com/pedrobtz/zudiff/issues/7) | | |
+| 5 | [Text, hunks and unified output](#stage-5--text-hunks-and-unified-output) | quick | [#7](https://github.com/pedrobtz/zudiff/issues/7) | [#19](https://github.com/pedrobtz/zudiff/pull/19) | 2026-10-27 |
 | 6 | [Patches and benchmarks](#stage-6--patches-and-benchmarks) | quick | [#8](https://github.com/pedrobtz/zudiff/issues/8) | | |
 | 7 | [Windows runtime](#stage-7--windows-runtime) | full | [#9](https://github.com/pedrobtz/zudiff/issues/9) | | |
 | 8 | [Full CI](#stage-8--full-ci) | full | [#10](https://github.com/pedrobtz/zudiff/issues/10) | | |
@@ -275,6 +275,11 @@ GNU-compatible unified diff.
 - The no-newline marker round-trips in both directions.
 - `R CMD check` passes on the quick profile.
 
+  Checked on 2026-10-27: GNU patch 2.7.6 (Ubuntu 24.04) applied all 636
+  generated cases byte for byte, both algorithms at context 0 and 3,
+  including CRLF, missing final newlines both ways, empty sides and UTF-8.
+  macOS has no GNU patch, so locally `git apply` is the oracle too.
+
 **Design.** §5, §6.5 (output), Q3.
 
 ## Stage 6 — Patches and benchmarks
@@ -291,6 +296,8 @@ test passes, and the §10 targets are measured.
 
 - `patch_parse()`: the GNU format plus git's `diff --git` and `index`
   lines, into a list of file patches.
+- Link `patch_apply()` from `diff_unified()`'s documentation, left out in
+  Stage 5 because the topic did not exist yet.
 - `patch_apply()` with exact context; a mismatch is a
   `zudiff_patch_error` naming the hunk.
 - The full round trip, `patch_apply(old, patch_parse(diff_unified(d)))`,
