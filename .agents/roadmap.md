@@ -67,6 +67,12 @@ on the platforms the POSIX-only stages need.
 - `R CMD check` passes on the quick r-actions profile.
 - Every check of the pull request's quick run finishes in under five
   minutes. Anything tuned to get there is recorded here.
+
+  Nothing was tuned. On 2026-10-27 the package's own steps took seconds,
+  but `r-lib/actions/setup-r` varied from about one to seven minutes
+  between runs of the same job: coverage took 1m06s, then 5m54s, of which
+  setup-r was 314 s. `quick-step` and `quick-containers` cannot shorten
+  that, so it is recorded rather than tuned.
 - `DESCRIPTION` carries no scaffold placeholder text.
 
 **Design.** §3, §5 (`zudiff_info()`).
