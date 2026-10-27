@@ -13,7 +13,13 @@
 #' @param old,new Two vectors of the same type: logical, integer, double,
 #'   complex, character or raw. A factor counts as a character vector of its
 #'   labels.
-#' @param algorithm The diff algorithm. Only `"myers"` for now.
+#' @param algorithm The diff algorithm: `"myers"`, the default, or
+#'   `"patience"`. Myers finds a shortest edit script. Patience first
+#'   aligns the elements that occur exactly once on each side, then diffs
+#'   the stretches between them, with Myers where a stretch has no such
+#'   element. On text it keeps functions and blocks aligned where Myers
+#'   may match stray braces and blank lines instead. Its scripts are not
+#'   minimal in general, and the result always records `minimal = FALSE`.
 #' @param max_cost The cost limit of Myers' search, which trades
 #'   minimality for time. `NULL`, the default, follows GNU diff: about the
 #'   square root of the input size, and at least 4096. `Inf` always finds a
@@ -29,12 +35,19 @@
 #' @examples
 #' d <- diff_vec(c("a", "b", "c"), c("a", "x", "c"))
 #' diff_edits(d)
-diff_vec <- function(old, new, algorithm = "myers", max_cost = NULL) {
+diff_vec <- function(
+  old,
+  new,
+  algorithm = c("myers", "patience"),
+  max_cost = NULL
+) {
   algorithm <- check_algorithm(algorithm)
-  diff_vec_impl(old, new, algorithm, 0L, check_max_cost(max_cost))
+  code <- c(myers = 0L, patience = 1L)[[algorithm]]
+  diff_vec_impl(old, new, algorithm, code, check_max_cost(max_cost))
 }
 
-# The diff itself. code is the core's algorithm number: 0 for Myers, 9 for
+# The diff itself. code is the core's algorithm number: 0 for Myers, 1 for
+# patience, 9 for
 # the greedy reference the tests compare against.
 diff_vec_impl <- function(old, new, algorithm, code, max_cost) {
   a <- as_diffable(old, "old")
@@ -88,12 +101,16 @@ check_max_cost <- function(max_cost) {
 }
 
 check_algorithm <- function(algorithm) {
+  choices <- c("myers", "patience")
+  if (identical(algorithm, choices)) {
+    return("myers")
+  }
   if (
     !is.character(algorithm) ||
       length(algorithm) != 1 ||
-      !algorithm %in% "myers"
+      !algorithm %in% choices
   ) {
-    zudiff_abort("input", "`algorithm` must be \"myers\".")
+    zudiff_abort("input", "`algorithm` must be \"myers\" or \"patience\".")
   }
   algorithm
 }

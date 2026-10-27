@@ -27,7 +27,7 @@ then.
 | 1 | [Goose toolchain and runtime](#stage-1--goose-toolchain-and-runtime) | full | [#3](https://github.com/pedrobtz/zudiff/issues/3) | [#15](https://github.com/pedrobtz/zudiff/pull/15) | 2026-10-27 |
 | 2 | [Greedy Myers and diff_vec()](#stage-2--greedy-myers-and-diff_vec) | quick | [#4](https://github.com/pedrobtz/zudiff/issues/4) | [#16](https://github.com/pedrobtz/zudiff/pull/16) | 2026-10-27 |
 | 3 | [Linear space, cost limit and interrupts](#stage-3--linear-space-cost-limit-and-interrupts) | quick | [#5](https://github.com/pedrobtz/zudiff/issues/5) | [#17](https://github.com/pedrobtz/zudiff/pull/17) | 2026-10-27 |
-| 4 | [Patience diff](#stage-4--patience-diff) | quick | [#6](https://github.com/pedrobtz/zudiff/issues/6) | | |
+| 4 | [Patience diff](#stage-4--patience-diff) | quick | [#6](https://github.com/pedrobtz/zudiff/issues/6) | [#18](https://github.com/pedrobtz/zudiff/pull/18) | 2026-10-27 |
 | 5 | [Text, hunks and unified output](#stage-5--text-hunks-and-unified-output) | quick | [#7](https://github.com/pedrobtz/zudiff/issues/7) | | |
 | 6 | [Patches and benchmarks](#stage-6--patches-and-benchmarks) | quick | [#8](https://github.com/pedrobtz/zudiff/issues/8) | | |
 | 7 | [Windows runtime](#stage-7--windows-runtime) | full | [#9](https://github.com/pedrobtz/zudiff/issues/9) | | |
@@ -232,6 +232,14 @@ to Myers between anchors.
   `new` for the interop fixtures, and git's `--patience` output is
   recorded for comparison.
 - `R CMD check` passes on the quick profile.
+
+  Recorded on 2026-10-27, git 2.55.0: on 500 random line files the edit
+  distance equalled `git diff --patience`'s on 499; on the one other,
+  zudiff's script was shorter (89 against 91). Hunks differ by
+  tie-breaking on about half the pairs. On the C fixture in
+  `helper-git.R` the change blocks are identical to git's, which a test
+  asserts. Myers with `max_cost = Inf` equalled `git diff --minimal`'s
+  distance on all 500.
 
 **Design.** §6.4, D6.
 

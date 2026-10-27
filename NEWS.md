@@ -5,6 +5,8 @@
   Equality is `match()`'s. Myers runs in linear space, and `max_cost`
   trades minimality for time as GNU diff does; the result records whether
   it is minimal. Ctrl-C stops a long diff.
+* `diff_vec(algorithm = "patience")` aligns the elements that occur once
+  on each side first, which keeps functions and blocks of text together.
 * `diff_edits()` lists its runs as 1-based starts and lengths,
   `diff_identical()` says whether the inputs were equal, and
   `diff_apply()` applies it.
