@@ -4,6 +4,10 @@
 
 - **Pedro Baltazar**. Author, maintainer, copyright holder.
 
+- **Wouter van Oortmerssen**. Contributor, copyright holder.  
+  author of the 'Goose' language and compiler; the runtime code the
+  generated C inlines and the runtime pieces in src/goose_vendor.c
+
 ## Citation
 
 Source:

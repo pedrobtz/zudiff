@@ -1,7 +1,7 @@
 # Information about zudiff
 
-Reports the package version. Later versions add the Goose compiler
-commit the bundled C was generated with.
+Reports the package version and the Goose compiler the bundled C was
+generated with.
 
 ## Usage
 
@@ -11,7 +11,9 @@ zudiff_info()
 
 ## Value
 
-A list with element `version`, a string.
+A list of strings: `version`, the package version; `goose_commit`, the
+Goose commit the C was generated at; and `goose_runtime`, that
+compiler's runtime interface hash.
 
 ## Examples
 
@@ -19,5 +21,11 @@ A list with element `version`, a string.
 zudiff_info()
 #> $version
 #> [1] "0.0.0.9000"
+#> 
+#> $goose_commit
+#> [1] "e76d5c9f7f0a17d83c12a405fbb2513094d03985"
+#> 
+#> $goose_runtime
+#> [1] "a5dbd11b6309"
 #> 
 ```

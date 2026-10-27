@@ -28,3 +28,9 @@ Useful links:
 Authors:
 
 - Pedro Baltazar <pedrobtz@gmail.com> \[copyright holder\]
+
+Other contributors:
+
+- Wouter van Oortmerssen (author of the 'Goose' language and compiler;
+  the runtime code the generated C inlines and the runtime pieces in
+  src/goose_vendor.c) \[contributor, copyright holder\]

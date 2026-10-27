@@ -77,22 +77,38 @@
 <span id="cb1-5"><a href="#cb1-5" tabindex="-1"></a><span class="ex">Rscript</span> <span class="at">-e</span> <span class="st">'devtools::test(shuffle = TRUE)'</span>      <span class="co"># order independence</span></span>
 <span id="cb1-6"><a href="#cb1-6" tabindex="-1"></a><span class="ex">Rscript</span> <span class="at">-e</span> <span class="st">'devtools::check()'</span>                   <span class="co"># R CMD check</span></span>
 <span id="cb1-7"><a href="#cb1-7" tabindex="-1"></a><span class="ex">air</span> format .                                     <span class="co"># format R sources</span></span></code></pre></div>
+<p>Occasional, when the Goose source or the pin changes. The checkout must be at <code>tools/goose/PIN</code> and built (<code>cmake -S . -B build &amp;&amp; cmake --build build</code>):</p>
+<div class="sourceCode" id="cb2"><pre class="sourceCode sh"><code class="sourceCode bash"><span id="cb2-1"><a href="#cb2-1" tabindex="-1"></a><span class="ex">tools/regenerate.sh</span> <span class="op">&lt;</span>goose-checkout<span class="op">&gt;</span>            <span class="co"># rewrite the generated C</span></span>
+<span id="cb2-2"><a href="#cb2-2" tabindex="-1"></a><span class="ex">tools/regenerate.sh</span> <span class="at">--verify</span> <span class="op">&lt;</span>goose-checkout<span class="op">&gt;</span>   <span class="co"># what CI runs</span></span>
+<span id="cb2-3"><a href="#cb2-3" tabindex="-1"></a><span class="ex">tools/check-symbols.sh</span> <span class="op">&lt;</span>path<span class="op">&gt;</span>/zudiff.so         <span class="co"># forbidden-symbol check</span></span>
+<span id="cb2-4"><a href="#cb2-4" tabindex="-1"></a><span class="ex">tools/run-benchmarks</span>                            <span class="co"># design §10, installed pkg</span></span></code></pre></div>
 </div>
 <div class="section level2">
 <h2 id="architecture">Architecture<a class="anchor" aria-label="anchor" href="#architecture"></a></h2>
-<p>To be written as stages land; see <code>.agents/design.md</code> §4. The scaffold set up a C layer (<code>src/zudiff.c</code>, <code>@useDynLib zudiff, .registration = TRUE</code>). Stage 0 replaces it with <code>zugojson</code>’s layout: Goose source in <code>tools/goose/</code>, compiled to <code>src/zudiff_goose.{c,h}</code> by <code>tools/regenerate.sh</code> at the commit in <code>tools/goose/PIN</code>, a runtime copied from <code>zugojson</code> (<code>src/goose_r_runtime.{c,h}</code>) and hand-written <code>.Call</code> glue (<code>src/zudiff_r.c</code>). <a href="https://github.com/pedrobtz/zugojson" class="external-link"><code>pedrobtz/zugojson</code></a> and its <code>CLAUDE.md</code> are the working reference. Read design §4.1 before writing Goose: it points at the Goose evaluations as the reference for memory layout.</p>
+<p>Design §4 is the specification; <a href="https://github.com/pedrobtz/zugojson" class="external-link"><code>pedrobtz/zugojson</code></a> and its <code>CLAUDE.md</code> are the working reference. Read design §4.1 before writing Goose: it points at the Goose evaluations for memory layout.</p>
+<pre class="text"><code>R/core.R                  core_value(), zudiff_abort(), the probes
+src/zudiff_r.c            .Call glue: the only C that uses R's API
+───────────────────────── plain C below ─────────────────────────
+src/zudiff_goose.{c,h}    generated from tools/goose/zudiff.goose
+src/goose_vendor.c        copied verbatim from Goose's runtime_impl.h
+src/goose_version.h       generated: runtime interface hash, the pin
+src/goose_r_runtime.{c,h} first-party runtime, copied from zugojson</code></pre>
+<p>Every entry point runs its Goose call inside <code>goose_r_run()</code> and returns <code>list(value, error)</code>; <code>core_value()</code> raises a non-<code>NULL</code> error as a <code>zudiff_runtime_error</code>. Vectors reach Goose borrowed (<code>sl_i32</code> points into <code>INTEGER(x)</code>), never copied. <code>src/Makevars</code> compiles with <code>$(C_VISIBILITY)</code> and only <code>R_init_zudiff</code> is marked visible, which <code>test-abi.R</code> checks.</p>
 </div>
 <div class="section level2">
 <h2 id="invariants-that-are-easy-to-break">Invariants that are easy to break<a class="anchor" aria-label="anchor" href="#invariants-that-are-easy-to-break"></a></h2>
-<p>These are fixed by the design; none is established in code yet.</p>
 <ul><li>
 <strong>The shipped C is generated.</strong> <code>src/zudiff_goose.c</code> comes from <code>tools/goose/zudiff.goose</code> through <code>tools/regenerate.sh</code>. Edit the Goose source and regenerate; CI fails on a hand edit.</li>
 <li>
-<strong>The Goose pieces copied in stay Apache-2.0</strong>, while <code>zudiff</code>’s own code is MIT. Keep the two licences declared.</li>
+<strong>The Goose pieces copied in stay Apache-2.0</strong>, while <code>zudiff</code>’s own code is MIT. Keep the two licences declared in <code>inst/COPYRIGHTS</code>.</li>
 <li>
 <strong>No R API inside <code>goose_r_run()</code>.</strong> Nothing Goose calls may allocate R objects or raise R errors; an R longjmp would skip the stack rewind. Results are copied into R objects after the run returns.</li>
 <li>
-<strong>The copied runtime has a history.</strong> Every change to <code>zugojson</code>’s copy (interrupts, Windows) is recorded in <code>tools/goose/PROVENANCE</code>, so a later move to <code>zugoose</code> knows what to carry over.</li>
+<strong>Every export clears its globals first.</strong> After a failure the data stack tops are rewound but Goose globals are not.</li>
+<li>
+<strong>Only <code>R_init_zudiff</code> is exported.</strong> The runtime’s <code>gs_*</code> names are Goose’s and cannot take a package prefix, so they must stay hidden or they clash with another package’s copy.</li>
+<li>
+<strong>The copied runtime has a history.</strong> Every change to <code>zugojson</code>’s copy (interrupts, Windows) is listed in <code>src/goose_r_runtime.c</code>’s header comment, so a later move to <code>zugoose</code> knows what to carry over. <code>tools/goose/PROVENANCE</code> is written by <code>tools/regenerate.sh</code>; never edit it.</li>
 <li>
 <strong>Equality is <code><a href="https://rdrr.io/r/base/match.html" class="external-link">match()</a></code>’s, computed in R.</strong> The core sees only integer ids or bytes and compares with <code>==</code>. Moving equality into the core would lose R’s rules for <code>NA</code>, <code>NaN</code>, signed zero, encodings and factor labels.</li>
 <li>
