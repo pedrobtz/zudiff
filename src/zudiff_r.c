@@ -77,13 +77,15 @@ SEXP zudiff_c_diff(SEXP a, SEXP b, SEXP algorithm, SEXP max_cost) {
   }
   c.algorithm = (int32_t) Rf_asInteger(algorithm);
   /* Inf, NaN or anything past int64's range means no limit; converting
-     such a double to int64_t directly is undefined behaviour. */
+     such a double to int64_t directly is undefined behaviour. A negative
+     value asks for the default limit. */
   double mc = Rf_asReal(max_cost);
   c.max_cost = (ISNAN(mc) || mc >= 9223372036854775807.0) ? INT64_MAX
-               : mc < 0 ? 0 : (int64_t) mc;
+               : mc < 0 ? -1 : (int64_t) mc;
   char err[ERRLEN];
-  if (goose_r_run(diff_body, &c, err, sizeof err))
-    return result(R_NilValue, err);
+  int failed = goose_r_run(diff_body, &c, err, sizeof err);
+  if (failed == 2) R_CheckUserInterrupt();
+  if (failed) return result(R_NilValue, err);
   SEXP out = PROTECT(Rf_allocVector(RAWSXP, (R_xlen_t) c.n));
   if (c.n > 0) memcpy(RAW(out), c.out, (size_t) c.n);
   SEXP res = result(out, NULL);
@@ -148,6 +150,11 @@ SEXP zudiff_c_probe_stack(SEXP n, SEXP fail) {
   return result(Rf_ScalarReal((double) c.v), NULL);
 }
 
+SEXP zudiff_c_test_raise_after(SEXP n) {
+  goose_r_test_raise_after((long) Rf_asInteger(n));
+  return R_NilValue;
+}
+
 SEXP zudiff_c_stack_used(void) {
   return Rf_ScalarReal((double) goose_r_stack_used());
 }
@@ -177,6 +184,7 @@ static const R_CallMethodDef call_methods[] = {
     {"zudiff_c_probe_sum", (DL_FUNC) &zudiff_c_probe_sum, 1},
     {"zudiff_c_probe_stack", (DL_FUNC) &zudiff_c_probe_stack, 2},
     {"zudiff_c_stack_used", (DL_FUNC) &zudiff_c_stack_used, 0},
+    {"zudiff_c_test_raise_after", (DL_FUNC) &zudiff_c_test_raise_after, 1},
     {"zudiff_c_goose_info", (DL_FUNC) &zudiff_c_goose_info, 0},
     {NULL, NULL, 0}};
 

@@ -25,9 +25,10 @@ decisions marked (C) and its open questions (§15) are still open.
 ## Current state
 
 Scaffolded 2026-10-26 with `create-pkg.sh`. As of 2026-10-27, `diff_vec()`,
-`diff_edits()`, `diff_identical()` and `diff_apply()` work, with greedy Myers
-(O(D²) memory) in Goose; the cost limit, interrupts, patience, text and
-patches are not built yet. The roadmap in `.agents/roadmap.md` takes it to v0.1.0.
+`diff_edits()`, `diff_identical()` and `diff_apply()` work, with linear-space
+Myers, GNU diff's cost limit and Ctrl-C in Goose (greedy Myers stays as the
+tests' reference, algorithm 9); patience, text and patches are not built
+yet. The roadmap in `.agents/roadmap.md` takes it to v0.1.0.
 It is built by hand on `zugojson`'s pattern, independently of `zugoose`
 (design D1, revised 2026-10-26).
 
@@ -123,6 +124,12 @@ and only `R_init_zudiff` is marked visible, which `test-abi.R` checks.
 - **The shipped C is generated.** `src/zudiff_goose.c` comes from
   `tools/goose/zudiff.goose` through `tools/regenerate.sh`. Edit the Goose
   source and regenerate; CI fails on a hand edit.
+- **Regenerate on macOS.** The compiler's output depends on the C++
+  standard library: with libstdc++ (Linux) some typedefs come out in a
+  different order than with libc++ (macOS). CI's `regenerate` job runs on
+  macOS to match until
+  [aardappel/goose#122](https://github.com/aardappel/goose/issues/122) is
+  fixed.
 - **The Goose pieces copied in stay Apache-2.0**, while `zudiff`'s own code
   is MIT. Keep the two licences declared in `inst/COPYRIGHTS`.
 - **No R API inside `goose_r_run()`.** Nothing Goose calls may allocate R

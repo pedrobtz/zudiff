@@ -31,3 +31,8 @@ supported_types <- c(
   "factor",
   "raw"
 )
+
+# The large property sweeps run where ZUDIFF_EXHAUSTIVE=true: the R CMD
+# check legs, not gctorture or valgrind, whose cost they multiply while
+# telling them nothing about memory safety.
+exhaustive <- function() identical(Sys.getenv("ZUDIFF_EXHAUSTIVE"), "true")

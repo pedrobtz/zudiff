@@ -4,7 +4,7 @@
 \alias{diff_vec}
 \title{Diff two vectors}
 \usage{
-diff_vec(old, new, algorithm = "myers")
+diff_vec(old, new, algorithm = "myers", max_cost = NULL)
 }
 \arguments{
 \item{old, new}{Two vectors of the same type: logical, integer, double,
@@ -12,6 +12,16 @@ complex, character or raw. A factor counts as a character vector of its
 labels.}
 
 \item{algorithm}{The diff algorithm. Only \code{"myers"} for now.}
+
+\item{max_cost}{The cost limit of Myers' search, which trades
+minimality for time. \code{NULL}, the default, follows GNU diff: about the
+square root of the input size, and at least 4096. \code{Inf} always finds a
+minimal script, in O((N + M) D) time for edit distance D. A smaller
+number gives up sooner on very different inputs; the script is still
+correct, but may not be minimal, which the result records.
+
+The limit counts the steps of each middle-snake search, as GNU diff
+does, not the edit distance of the whole script.}
 }
 \value{
 An object of class \code{zudiff}. Read it with \code{\link[=diff_edits]{diff_edits()}} and

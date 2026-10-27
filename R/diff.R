@@ -14,14 +14,29 @@
 #'   complex, character or raw. A factor counts as a character vector of its
 #'   labels.
 #' @param algorithm The diff algorithm. Only `"myers"` for now.
+#' @param max_cost The cost limit of Myers' search, which trades
+#'   minimality for time. `NULL`, the default, follows GNU diff: about the
+#'   square root of the input size, and at least 4096. `Inf` always finds a
+#'   minimal script, in O((N + M) D) time for edit distance D. A smaller
+#'   number gives up sooner on very different inputs; the script is still
+#'   correct, but may not be minimal, which the result records.
+#'
+#'   The limit counts the steps of each middle-snake search, as GNU diff
+#'   does, not the edit distance of the whole script.
 #' @return An object of class `zudiff`. Read it with [diff_edits()] and
 #'   [diff_identical()], and apply it with [diff_apply()].
 #' @export
 #' @examples
 #' d <- diff_vec(c("a", "b", "c"), c("a", "x", "c"))
 #' diff_edits(d)
-diff_vec <- function(old, new, algorithm = "myers") {
+diff_vec <- function(old, new, algorithm = "myers", max_cost = NULL) {
   algorithm <- check_algorithm(algorithm)
+  diff_vec_impl(old, new, algorithm, 0L, check_max_cost(max_cost))
+}
+
+# The diff itself. code is the core's algorithm number: 0 for Myers, 9 for
+# the greedy reference the tests compare against.
+diff_vec_impl <- function(old, new, algorithm, code, max_cost) {
   a <- as_diffable(old, "old")
   b <- as_diffable(new, "new")
   if (typeof(a) != typeof(b)) {
@@ -49,8 +64,27 @@ diff_vec <- function(old, new, algorithm = "myers") {
     ia <- ids[seq_along(a)]
     ib <- ids[length(a) + seq_along(b)]
   }
-  packed <- core_value(.Call(zudiff_c_diff, ia, ib, 0L, Inf))
+  packed <- core_value(.Call(zudiff_c_diff, ia, ib, code, max_cost))
   new_zudiff(old, new, unpack_script(packed), algorithm)
+}
+
+# -1 asks the core for its default limit.
+check_max_cost <- function(max_cost) {
+  if (is.null(max_cost)) {
+    return(-1)
+  }
+  if (
+    !is.numeric(max_cost) ||
+      length(max_cost) != 1 ||
+      is.na(max_cost) ||
+      max_cost < 0
+  ) {
+    zudiff_abort(
+      "input",
+      "`max_cost` must be NULL or a single non-negative number."
+    )
+  }
+  as.double(max_cost)
 }
 
 check_algorithm <- function(algorithm) {

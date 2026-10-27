@@ -39,3 +39,8 @@ probe_stack <- function(n, fail) {
 }
 
 stack_used <- function() .Call(zudiff_c_stack_used)
+
+# The n-th interrupt poll of the next Goose run raises a real SIGINT.
+test_raise_after <- function(n) {
+  invisible(.Call(zudiff_c_test_raise_after, as.integer(n)))
+}

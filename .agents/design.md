@@ -94,7 +94,7 @@ family's conventions.
 - Applying an edit script, and applying a unified diff with exact context
   (no fuzz).
 - Interrupts from long diffs, through the runtime's own
-  `zudiff_interrupted()` (§6.3).
+  `zudiff_check_interrupt()` (§6.3).
 - A Windows half of the copied runtime (D10).
 
 **Not in v0.1.0** (§14): three-way merge, word and character diff inside
@@ -307,17 +307,20 @@ diffed with the linear-space divide and conquer of Myers' §4b: find the
 middle snake, recurse on each side. Memory is O(N + M) on Goose's data
 stacks.
 
-The answer is minimal unless the cost limit is reached. `max_cost`, an
-edit distance, defaults to `max(4096, sqrt(N + M))` when `NULL`, following
-GNU diff rather than git (Q1). `zudiff`'s output is data that siblings
-build on and tests snapshot, so a non-minimal script surprises more than a
-slow one, and a slow one can be interrupted. When
-the middle-snake search passes it, the search stops and splits at the
-furthest-reaching diagonal found so far, as GNU diff does. The result is
+The answer is minimal unless the cost limit is reached. `max_cost` counts
+the steps of one middle-snake search, as GNU diff's `too_expensive` does,
+not the edit distance of the whole script. When `NULL` it defaults to GNU
+diff's rule, `max(4096, 2^(floor(log2(N + M + 3)) / 2 + 1))`: a power of
+two between √(N + M) and 2√(N + M), at least 4096 (Q1). `zudiff`'s output
+is data that siblings build on and tests snapshot, so a non-minimal script
+surprises more than a slow one, and a slow one can be interrupted. When a
+search reaches the limit without meeting, it splits at whichever of the
+forward and backward searches got further, as GNU diff does, and the side
+the split leaves unsure is diffed minimally. The result is
 still a correct script, and the object records `minimal = FALSE`.
 `max_cost = Inf` always finds the minimum, at O((N + M) D) time.
 
-The outer loop over D calls `zudiff_interrupted()` every 2¹⁰ steps, so
+The outer loop over D calls `zudiff_check_interrupt()` every 2¹⁰ steps, so
 Ctrl-C stops a long diff. It is an `extern fn` into the runtime, the way
 `zugojson` reaches `zugojson_strtod`. The runtime installs a `SIGINT`
 handler that sets a flag for the duration of `goose_r_run()` only. When the
@@ -530,11 +533,16 @@ Marked **(M)** when the maintainer decided it in the conversation and
 Each question has a recommendation, recorded 2026-10-26. A question stays
 listed until the stage named confirms it.
 
-- **Q1.** Is the `max_cost` default right? Recommended: GNU diff's,
-  `max(4096, sqrt(N + M))`, over git's floor of 256 (§6.3). Both numbers
-  are from memory: Stage 2 checks them against GNU diffutils' `analyze.c`
-  and git's `xdiff/xdiffi.c`, and compares the three on the benchmark
-  corpus.
+- **Q1.** Is the `max_cost` default right? Settled 2026-10-27: GNU
+  diff's (§6.3). Checked against the sources: GNU diffutils `src/analyze.c`
+  sets `too_expensive = 1 << ((floor_log2 (diags) >> 1) + 1)`, at least
+  4096, with `diags` = N + M + 3; git's `xdiff/xdiffi.c` sets `mxcost =
+  xdl_bogosqrt(ndiags)`, at least `XDL_MAX_COST_MIN` = 256. The RFC's
+  `8 * sqrt` for git was wrong, and git's floor is 16 times lower than
+  GNU's. GNU's keeps scripts minimal on far larger inputs, which data
+  that is compared and snapshotted needs more than speed. The corpus
+  comparison is left to Stage 6's benchmarks: on the §10 text input the
+  default gives a minimal script in 75 ms.
 - **Q2.** Should `diff_vec()` on doubles offer a tolerance, as `waldo`
   does? Settled: no. A tolerance breaks transitivity, and Myers assumes
   it; callers round first (§6.1).

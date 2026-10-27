@@ -6,9 +6,17 @@ typedef struct { uint8_t *base; int64_t len; } gs_rhdr;
 typedef struct { gs_rhdr *hdr; gs_stack *stk; } gs_rref;
 typedef struct { gs_rhdr *hdr; gs_stack *stk; gs_rhdr *fl; gs_stack *flstk; } gs_pref;
 
+typedef struct { uint8_t *data; int64_t len; } sl_u8;
+
 typedef struct { int32_t *data; int64_t len; } sl_i32;
 
-typedef struct { uint8_t *data; int64_t len; } sl_u8;
+typedef struct Part_g Part_g;
+struct Part_g {
+    int64_t xmid_g;
+    int64_t ymid_g;
+    uint8_t lo_minimal_g;
+    uint8_t hi_minimal_g;
+};
 
 typedef struct Run_g Run_g;
 struct Run_g {
@@ -24,6 +32,16 @@ struct Step_g {
     int32_t len_g;
 };
 
+typedef struct Task_g Task_g;
+struct Task_g {
+    int32_t kind_g;
+    int32_t xoff_g;
+    int32_t xlim_g;
+    int32_t yoff_g;
+    int32_t ylim_g;
+    uint8_t find_minimal_g;
+};
+
 typedef struct { int64_t e[3]; } a3_i64;
 
 #pragma pack(pop)
@@ -32,11 +50,11 @@ typedef struct { int64_t e[3]; } a3_i64;
 extern "C" {
 #endif
 void goose_init(int argc, char **argv);
-int64_t zudiff_probe_index(int64_t gs_export_arg0);
-int64_t zudiff_probe_sum(sl_i32 gs_export_arg0_2);
-int64_t zudiff_probe_stack(int64_t gs_export_arg0_3, uint8_t gs_export_arg1);
-const uint8_t * zudiff_diff_ids(sl_i32 gs_export_arg0_4, sl_i32 gs_export_arg1_2, int32_t gs_export_arg2, int64_t gs_export_arg3, int64_t *gs_export_len_4);
-const uint8_t * zudiff_diff_bytes(sl_u8 gs_export_arg0_5, sl_u8 gs_export_arg1_3, int32_t gs_export_arg2_2, int64_t gs_export_arg3_2, int64_t *gs_export_len_5);
+const uint8_t * zudiff_diff_ids(sl_i32 gs_export_arg0, sl_i32 gs_export_arg1, int32_t gs_export_arg2, int64_t gs_export_arg3, int64_t *gs_export_len);
+const uint8_t * zudiff_diff_bytes(sl_u8 gs_export_arg0_2, sl_u8 gs_export_arg1_2, int32_t gs_export_arg2_2, int64_t gs_export_arg3_2, int64_t *gs_export_len_2);
+int64_t zudiff_probe_index(int64_t gs_export_arg0_3);
+int64_t zudiff_probe_sum(sl_i32 gs_export_arg0_4);
+int64_t zudiff_probe_stack(int64_t gs_export_arg0_5, uint8_t gs_export_arg1_3);
 #ifdef __cplusplus
 }
 #endif
