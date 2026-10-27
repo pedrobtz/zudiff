@@ -26,7 +26,7 @@ then.
 | 0 | [Package identity](#stage-0--package-identity) | quick | [#2](https://github.com/pedrobtz/zudiff/issues/2) | [#14](https://github.com/pedrobtz/zudiff/pull/14) | 2026-10-27 |
 | 1 | [Goose toolchain and runtime](#stage-1--goose-toolchain-and-runtime) | full | [#3](https://github.com/pedrobtz/zudiff/issues/3) | [#15](https://github.com/pedrobtz/zudiff/pull/15) | 2026-10-27 |
 | 2 | [Greedy Myers and diff_vec()](#stage-2--greedy-myers-and-diff_vec) | quick | [#4](https://github.com/pedrobtz/zudiff/issues/4) | [#16](https://github.com/pedrobtz/zudiff/pull/16) | 2026-10-27 |
-| 3 | [Linear space, cost limit and interrupts](#stage-3--linear-space-cost-limit-and-interrupts) | quick | [#5](https://github.com/pedrobtz/zudiff/issues/5) | | |
+| 3 | [Linear space, cost limit and interrupts](#stage-3--linear-space-cost-limit-and-interrupts) | quick | [#5](https://github.com/pedrobtz/zudiff/issues/5) | | 2026-10-27 |
 | 4 | [Patience diff](#stage-4--patience-diff) | quick | [#6](https://github.com/pedrobtz/zudiff/issues/6) | | |
 | 5 | [Text, hunks and unified output](#stage-5--text-hunks-and-unified-output) | quick | [#7](https://github.com/pedrobtz/zudiff/issues/7) | | |
 | 6 | [Patches and benchmarks](#stage-6--patches-and-benchmarks) | quick | [#8](https://github.com/pedrobtz/zudiff/issues/8) | | |
@@ -189,6 +189,11 @@ correct script, and Ctrl-C ends a long diff.
   diffutils' `analyze.c` and git's `xdiff/xdiffi.c`, compare the three on
   the benchmark corpus, and record the outcome in the design.
 
+  Done in part on 2026-10-27: the default is checked against both sources
+  and recorded in design Q1. Comparing the three heuristics on the
+  benchmark corpus moves to Stage 6, which builds the corpus; on the §10
+  text input the default already gives a minimal script.
+
 **Exit criteria.**
 
 - With `max_cost = Inf`, the edit distance equals the reference's on 10⁴
@@ -285,6 +290,8 @@ test passes, and the §10 targets are measured.
 - Interop: `patch_apply()` applies `git diff --no-index` output, plain,
   `--minimal` and `--patience`, to give `new`; Myers' edit distance equals
   `--minimal`'s.
+- Compare GNU diff's, git's and the RFC's `max_cost` heuristics on the
+  benchmark corpus (moved from Stage 3).
 - `tools/run-benchmarks` over every §10 row, recorded in
   `.agents/benchmarks.md`, with the 5× target revised if Stage 1's
   baseline showed `diffobj` already that fast.
@@ -405,8 +412,8 @@ stages that confirm them.
 
 - **D3, equality through `match()`**: kept, with ids from `match(x, x)`.
   Stage 2 builds on it.
-- **Q1**, the `max_cost` default: GNU diff's `max(4096, sqrt(N + M))`
-  recommended, checked against the sources in Stage 3.
+- **Q1**, the `max_cost` default: settled in Stage 3, GNU diff's rule,
+  checked against the sources (design Q1).
 - **Q2**, a tolerance for doubles: settled, no; callers round first.
 - **Q3**, line endings: settled, compared exactly; `strip_cr` is after
   0.1.0.
