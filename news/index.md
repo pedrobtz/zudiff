@@ -5,7 +5,12 @@
 - [`diff_vec()`](https://pedrobtz.github.io/zudiff/reference/diff_vec.md)
   computes the shortest edit script between two vectors of the same
   type, or two raw vectors byte by byte, with Myers’ algorithm. Equality
-  is [`match()`](https://rdrr.io/r/base/match.html)’s.
+  is [`match()`](https://rdrr.io/r/base/match.html)’s. Myers runs in
+  linear space, and `max_cost` trades minimality for time as GNU diff
+  does; the result records whether it is minimal. Ctrl-C stops a long
+  diff.
+- `diff_vec(algorithm = "patience")` aligns the elements that occur once
+  on each side first, which keeps functions and blocks of text together.
 - [`diff_edits()`](https://pedrobtz.github.io/zudiff/reference/diff_edits.md)
   lists its runs as 1-based starts and lengths,
   [`diff_identical()`](https://pedrobtz.github.io/zudiff/reference/diff_edits.md)

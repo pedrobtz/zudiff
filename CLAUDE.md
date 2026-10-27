@@ -33,10 +33,11 @@ Scaffolded 2026-10-26 with `create-pkg.sh`. As of 2026-10-27,
 [`diff_identical()`](https://pedrobtz.github.io/zudiff/reference/diff_edits.md)
 and
 [`diff_apply()`](https://pedrobtz.github.io/zudiff/reference/diff_apply.md)
-work, with greedy Myers (O(D²) memory) in Goose; the cost limit,
-interrupts, patience, text and patches are not built yet. The roadmap in
-`.agents/roadmap.md` takes it to v0.1.0. It is built by hand on
-`zugojson`’s pattern, independently of `zugoose` (design D1, revised
+work, with linear-space Myers, GNU diff’s cost limit, patience diff and
+Ctrl-C in Goose (greedy Myers stays as the tests’ reference, algorithm
+9); text, hunks, unified diffs and patches are not built yet. The
+roadmap in `.agents/roadmap.md` takes it to v0.1.0. It is built by hand
+on `zugojson`’s pattern, independently of `zugoose` (design D1, revised
 2026-10-26).
 
 ## Stage tracking
@@ -135,6 +136,12 @@ into `INTEGER(x)`), never copied. `src/Makevars` compiles with
 - **The shipped C is generated.** `src/zudiff_goose.c` comes from
   `tools/goose/zudiff.goose` through `tools/regenerate.sh`. Edit the
   Goose source and regenerate; CI fails on a hand edit.
+- **Regenerate on macOS.** The compiler’s output depends on the C++
+  standard library: with libstdc++ (Linux) some typedefs come out in a
+  different order than with libc++ (macOS). CI’s `regenerate` job runs
+  on macOS to match until
+  [aardappel/goose#122](https://github.com/aardappel/goose/issues/122)
+  is fixed.
 - **The Goose pieces copied in stay Apache-2.0**, while `zudiff`’s own
   code is MIT. Keep the two licences declared in `inst/COPYRIGHTS`.
 - **No R API inside `goose_r_run()`.** Nothing Goose calls may allocate
@@ -177,13 +184,19 @@ into `INTEGER(x)`), never copied. `src/Makevars` compiles with
   the definition of done.
 - **Borrow a conformance suite before writing one.** Mainstream
   implementations in Python, Java, Go or Node usually ship a test
-  corpus. Use it as an oracle rather than inventing cases by hand. None
-  yet; the design uses GNU `patch` and `git diff --no-index` as oracles
-  where the CI image has them.
-- **Helpers live in `tests/testthat/helper-*.R`.** None yet; the design
-  plans an O(NM) dynamic-programming edit-distance reference there.
-- **Keep the suite inside the CRAN time budget.** Only the scaffold’s
-  placeholder test exists so far.
+  corpus. Use it as an oracle rather than inventing cases by hand. There
+  is no diff corpus to borrow, so git is the oracle where it is
+  installed (`git diff --no-index`, `helper-git.R`); GNU `patch` joins
+  it in Stage 5. Hunks may differ from git’s by tie-breaking, so tests
+  compare edit distances, and exact blocks only on chosen fixtures.
+- **Helpers live in `tests/testthat/helper-*.R`.** `helper-generate.R`
+  draws random pairs of every supported type and defines `exhaustive()`;
+  `helper-reference.R` is the O(NM) edit-distance reference and the
+  greedy core; `helper-git.R` turns `git diff -U0` and a `zudiff` object
+  into comparable change blocks.
+- **Keep the suite inside the CRAN time budget.** About 32 s locally on
+  2026-10-27. The large sweeps run only where `ZUDIFF_EXHAUSTIVE=true`,
+  which the R CMD check caller sets and gctorture and valgrind do not.
 
 ## Definition of done
 
