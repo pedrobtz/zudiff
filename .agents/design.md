@@ -121,7 +121,7 @@ changed lines, histogram diff, patch fuzz, diffs of directories, a C API.
   (`goose_r_runtime.{c,h}`), `tools/regenerate.sh`, `tools/check-symbols.sh`
   and the `goose.yaml` workflow, and writes its own `.Call` glue. Where
   `zudiff` changes the copied runtime (interrupts, D10's Windows half),
-  the change is recorded in `tools/goose/PROVENANCE`.
+  the change is recorded in `src/goose_r_runtime.c`'s header comment.
 - **`zugoose`** (RFC 0044): not used (D1). `zudiff` is an independent
   second hand-built Goose package. What it learns (borrowed vector
   arguments, raw results, interrupts, Windows) is reported to `zugoose` as

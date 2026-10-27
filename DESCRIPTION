@@ -1,9 +1,13 @@
 Package: zudiff
 Title: Shortest Edit Scripts, Unified Diffs and Patches
 Version: 0.0.0.9000
-Authors@R: 
+Authors@R: c(
     person("Pedro", "Baltazar", , "pedrobtz@gmail.com",
-           role = c("aut", "cre", "cph"))
+           role = c("aut", "cre", "cph")),
+    person("Wouter", "van Oortmerssen", role = c("ctb", "cph"),
+           comment = paste("author of the 'Goose' language and compiler;",
+                           "the runtime code the generated C inlines and",
+                           "the runtime pieces in src/goose_vendor.c")))
 Description: Computes the shortest edit script between two sequences
     (atomic vectors, raw vectors or the lines of two strings) and returns
     it as data, with Myers' algorithm (E. W. Myers (1986)
@@ -15,6 +19,7 @@ Description: Computes the shortest edit script between two sequences
     (<https://github.com/aardappel/goose>) and compiled ahead of time to
     C, which the package bundles.
 License: MIT + file LICENSE
+Copyright: See inst/COPYRIGHTS.
 URL: https://github.com/pedrobtz/zudiff, https://pedrobtz.github.io/zudiff/
 BugReports: https://github.com/pedrobtz/zudiff/issues
 Depends:

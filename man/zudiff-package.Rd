@@ -25,5 +25,10 @@ Authors:
   \item Pedro Baltazar \email{pedrobtz@gmail.com} [copyright holder]
 }
 
+Other contributors:
+\itemize{
+  \item Wouter van Oortmerssen (author of the 'Goose' language and compiler; the runtime code the generated C inlines and the runtime pieces in src/goose_vendor.c) [contributor, copyright holder]
+}
+
 }
 \keyword{internal}

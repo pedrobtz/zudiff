@@ -24,7 +24,7 @@ then.
 | Stage | Title | CI | Issue | Pull request | Done |
 | --- | --- | --- | --- | --- | --- |
 | 0 | [Package identity](#stage-0--package-identity) | quick | [#2](https://github.com/pedrobtz/zudiff/issues/2) | [#14](https://github.com/pedrobtz/zudiff/pull/14) | 2026-10-27 |
-| 1 | [Goose toolchain and runtime](#stage-1--goose-toolchain-and-runtime) | full | [#3](https://github.com/pedrobtz/zudiff/issues/3) | | |
+| 1 | [Goose toolchain and runtime](#stage-1--goose-toolchain-and-runtime) | full | [#3](https://github.com/pedrobtz/zudiff/issues/3) | [#15](https://github.com/pedrobtz/zudiff/pull/15) | 2026-10-27 |
 | 2 | [Greedy Myers and diff_vec()](#stage-2--greedy-myers-and-diff_vec) | quick | [#4](https://github.com/pedrobtz/zudiff/issues/4) | | |
 | 3 | [Linear space, cost limit and interrupts](#stage-3--linear-space-cost-limit-and-interrupts) | quick | [#5](https://github.com/pedrobtz/zudiff/issues/5) | | |
 | 4 | [Patience diff](#stage-4--patience-diff) | quick | [#6](https://github.com/pedrobtz/zudiff/issues/6) | | |
@@ -97,7 +97,7 @@ and the §10 baseline is recorded before any diff code exists.
 - Copy from `zugojson`: `src/goose_r_runtime.{c,h}`, `tools/regenerate.sh`,
   `tools/check-symbols.sh`, the `goose.yaml` workflow and
   `tests/testthat/test-runtime.R`. Rename what names the package; record
-  the copy and every change in `tools/goose/PROVENANCE`.
+  the copy and every change in `src/goose_r_runtime.c`'s header comment.
 - `tools/goose/zudiff.goose` with one probe export, regenerated into
   `src/zudiff_goose.{c,h}`, `src/goose_version.h` and `src/goose_vendor.c`.
 - `src/zudiff_r.c`: the `.Call` glue and `R_init_zudiff()`, replacing the
@@ -182,7 +182,7 @@ correct script, and Ctrl-C ends a long diff.
   `max_cost = Inf`.
 - `zudiff_interrupted()` as an `extern fn`, a `SIGINT` handler installed
   only for the duration of `goose_r_run()`, and the glue re-raising the
-  interrupt in R. The change is recorded in `tools/goose/PROVENANCE`.
+  interrupt in R. The change is recorded in `src/goose_r_runtime.c`'s header comment.
 - An O(NM) dynamic-programming edit-distance reference in
   `tests/testthat/helper-reference.R`.
 - Check the recommended `max_cost` default (design Q1) against GNU
@@ -316,7 +316,7 @@ vectored exception handler and a console control handler`.
 - The Windows half of `goose_r_runtime.c`: `VirtualAlloc` with
   `PAGE_NOACCESS` for the stack gap, a vectored exception handler for the
   fault, and a console control handler for Ctrl-C. Remove the `#error`.
-  Record the change in `tools/goose/PROVENANCE`.
+  Record the change in `src/goose_r_runtime.c`'s header comment.
 - Drop `OS_type: unix` and update `SystemRequirements`.
 - `R-CMD-check.yaml`: restore the default Windows runner and add the
   Windows R-devel row.

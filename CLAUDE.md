@@ -83,33 +83,59 @@ Rscript -e 'devtools::check()'                   # R CMD check
 air format .                                     # format R sources
 ```
 
+Occasional, when the Goose source or the pin changes. The checkout must be
+at `tools/goose/PIN` and built (`cmake -S . -B build && cmake --build
+build`):
+
+```sh
+tools/regenerate.sh <goose-checkout>            # rewrite the generated C
+tools/regenerate.sh --verify <goose-checkout>   # what CI runs
+tools/check-symbols.sh <path>/zudiff.so         # forbidden-symbol check
+tools/run-benchmarks                            # design §10, installed pkg
+```
+
 ## Architecture
 
-To be written as stages land; see `.agents/design.md` §4. The scaffold set up
-a C layer (`src/zudiff.c`, `@useDynLib zudiff, .registration = TRUE`). Stage 0
-replaces it with `zugojson`'s layout: Goose source in `tools/goose/`, compiled
-to `src/zudiff_goose.{c,h}` by `tools/regenerate.sh` at the commit in
-`tools/goose/PIN`, a runtime copied from `zugojson`
-(`src/goose_r_runtime.{c,h}`) and hand-written `.Call` glue
-(`src/zudiff_r.c`). [`pedrobtz/zugojson`](https://github.com/pedrobtz/zugojson)
-and its `CLAUDE.md` are the working reference. Read design §4.1 before writing Goose:
-it points at the Goose evaluations as the reference for memory layout.
+Design §4 is the specification; [`pedrobtz/zugojson`](https://github.com/pedrobtz/zugojson)
+and its `CLAUDE.md` are the working reference. Read design §4.1 before
+writing Goose: it points at the Goose evaluations for memory layout.
+
+```text
+R/core.R                  core_value(), zudiff_abort(), the probes
+src/zudiff_r.c            .Call glue: the only C that uses R's API
+───────────────────────── plain C below ─────────────────────────
+src/zudiff_goose.{c,h}    generated from tools/goose/zudiff.goose
+src/goose_vendor.c        copied verbatim from Goose's runtime_impl.h
+src/goose_version.h       generated: runtime interface hash, the pin
+src/goose_r_runtime.{c,h} first-party runtime, copied from zugojson
+```
+
+Every entry point runs its Goose call inside `goose_r_run()` and returns
+`list(value, error)`; `core_value()` raises a non-`NULL` error as a
+`zudiff_runtime_error`. Vectors reach Goose borrowed (`sl_i32` points into
+`INTEGER(x)`), never copied. `src/Makevars` compiles with `$(C_VISIBILITY)`
+and only `R_init_zudiff` is marked visible, which `test-abi.R` checks.
 
 ## Invariants that are easy to break
-
-These are fixed by the design; none is established in code yet.
 
 - **The shipped C is generated.** `src/zudiff_goose.c` comes from
   `tools/goose/zudiff.goose` through `tools/regenerate.sh`. Edit the Goose
   source and regenerate; CI fails on a hand edit.
 - **The Goose pieces copied in stay Apache-2.0**, while `zudiff`'s own code
-  is MIT. Keep the two licences declared.
+  is MIT. Keep the two licences declared in `inst/COPYRIGHTS`.
 - **No R API inside `goose_r_run()`.** Nothing Goose calls may allocate R
   objects or raise R errors; an R longjmp would skip the stack rewind.
   Results are copied into R objects after the run returns.
+- **Every export clears its globals first.** After a failure the data
+  stack tops are rewound but Goose globals are not.
+- **Only `R_init_zudiff` is exported.** The runtime's `gs_*` names are
+  Goose's and cannot take a package prefix, so they must stay hidden or
+  they clash with another package's copy.
 - **The copied runtime has a history.** Every change to `zugojson`'s copy
-  (interrupts, Windows) is recorded in `tools/goose/PROVENANCE`, so a
-  later move to `zugoose` knows what to carry over.
+  (interrupts, Windows) is listed in `src/goose_r_runtime.c`'s header
+  comment, so a later move to `zugoose` knows what to carry over.
+  `tools/goose/PROVENANCE` is written by `tools/regenerate.sh`; never edit
+  it.
 - **Equality is `match()`'s, computed in R.** The core sees only integer ids
   or bytes and compares with `==`. Moving equality into the core would lose
   R's rules for `NA`, `NaN`, signed zero, encodings and factor labels.
