@@ -7,11 +7,13 @@
 zudiff_info()
 }
 \value{
-A list with element \code{version}, a string.
+A list of strings: \code{version}, the package version;
+\code{goose_commit}, the Goose commit the C was generated at; and
+\code{goose_runtime}, that compiler's runtime interface hash.
 }
 \description{
-Reports the package version. Later versions add the Goose compiler
-commit the bundled C was generated with.
+Reports the package version and the Goose compiler the bundled C was
+generated with.
 }
 \examples{
 zudiff_info()
