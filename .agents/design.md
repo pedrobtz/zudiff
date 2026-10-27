@@ -302,10 +302,22 @@ input; that is the property the tests rest on (§9).
 ### 6.3 Myers
 
 The default. Common prefix and suffix are trimmed first, which is most of
-the work for the usual input of two versions of one file. The middle is
+the work for the usual input of two versions of one file. Elements that
+occur nowhere in the other input are then set aside, as GNU diff's
+`discard_confusing_lines` does in the part of it that keeps the answer
+minimal: such an element is in no common subsequence, so it is deleted or
+inserted whatever the search finds, and the search runs on the rest only.
+On two versions of a file most changed lines are new, so this removes most
+of the edits the search would otherwise pay for. The set-aside elements are
+put back as deletes and inserts between the equal runs. The middle is
 diffed with the linear-space divide and conquer of Myers' §4b: find the
 middle snake, recurse on each side. Memory is O(N + M) on Goose's data
 stacks.
+
+The snakes, the runs of equal elements the search follows, compare a few
+elements one by one, then 64 at a time by slice equality (`memcmp`), in
+`checkfree` functions whose index checks the compiler proves away. Long
+equal runs, as in two versions of a byte stream, then cost little.
 
 The answer is minimal unless the cost limit is reached. `max_cost` counts
 the steps of one middle-snake search, as GNU diff's `too_expensive` does,
@@ -325,7 +337,11 @@ Ctrl-C stops a long diff. It is an `extern fn` into the runtime, the way
 `zugojson` reaches `zugojson_strtod`. The runtime installs a `SIGINT`
 handler that sets a flag for the duration of `goose_r_run()` only. When the
 flag is set, the core fails the call, the stacks rewind, and the glue
-re-raises the interrupt in R after the run. `zugojson`'s runtime has none
+re-raises the interrupt in R after the run. Only diffs of 4096 elements or
+more catch `SIGINT` this way (`goose_r_run_interruptible()`): the two
+`sigaction()` calls cost a third of an empty call, and a shorter diff ends
+before a user could press Ctrl-C twice. During one, R's own handler takes
+the signal and R acts on it once the call returns. `zugojson`'s runtime has none
 of this; it is the first change `zudiff` makes to the copy, and it mirrors
 RFC 0044 §6.2 so that a later move to `zugoose` changes only the name.
 
@@ -410,7 +426,9 @@ than 2³¹ − 1 are an input error: ids and positions are `i32`.
 - **The runtime.** `zugojson`'s `test-runtime.R` comes with the copied
   runtime: a failure rewinds the stacks and the next call succeeds.
   `zudiff` adds an interrupt test on a pair of 10⁶-element vectors with
-  no common elements and `max_cost = Inf`.
+  `max_cost = Inf`. They are random over three values, not disjoint as
+  first planned: Stage 6 discards elements with no match on the other side
+  before the search (§6.3), which makes two disjoint vectors trivial.
 - **The generated C.** The `goose.yaml` workflow rebuilds Goose at the
   pin and fails if `tools/regenerate.sh --verify` finds a difference.
 - **From the family** (R3): `test-abi.R`, that the shared object exports
@@ -431,6 +449,10 @@ with the baseline run in Stage 0 before any `zudiff` code exists.
 
 The 5× is a guess until Stage 0 measures `diffobj`; if it is already that
 fast, the target becomes parity and the case rests on §1.2's other points.
+
+Measured in Stage 6 (`.agents/benchmarks.md`): every target is met. The
+text row is 4.6× to 7.1× over three runs, because `diffobj`'s own time
+varies from 192 to 303 ms between runs on the same machine.
 
 ## 11. Roadmap
 

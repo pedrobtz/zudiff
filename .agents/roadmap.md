@@ -29,7 +29,7 @@ then.
 | 3 | [Linear space, cost limit and interrupts](#stage-3--linear-space-cost-limit-and-interrupts) | quick | [#5](https://github.com/pedrobtz/zudiff/issues/5) | [#17](https://github.com/pedrobtz/zudiff/pull/17) | 2026-10-27 |
 | 4 | [Patience diff](#stage-4--patience-diff) | quick | [#6](https://github.com/pedrobtz/zudiff/issues/6) | [#18](https://github.com/pedrobtz/zudiff/pull/18) | 2026-10-27 |
 | 5 | [Text, hunks and unified output](#stage-5--text-hunks-and-unified-output) | quick | [#7](https://github.com/pedrobtz/zudiff/issues/7) | [#19](https://github.com/pedrobtz/zudiff/pull/19) | 2026-10-27 |
-| 6 | [Patches and benchmarks](#stage-6--patches-and-benchmarks) | quick | [#8](https://github.com/pedrobtz/zudiff/issues/8) | | |
+| 6 | [Patches and benchmarks](#stage-6--patches-and-benchmarks) | quick | [#8](https://github.com/pedrobtz/zudiff/issues/8) | | 2026-10-27 |
 | 7 | [Windows runtime](#stage-7--windows-runtime) | full | [#9](https://github.com/pedrobtz/zudiff/issues/9) | | |
 | 8 | [Full CI](#stage-8--full-ci) | full | [#10](https://github.com/pedrobtz/zudiff/issues/10) | | |
 | 9 | [v0.1.0 readiness](#stage-9--v010-readiness) | full | [#11](https://github.com/pedrobtz/zudiff/issues/11) | | |
@@ -317,6 +317,19 @@ test passes, and the §10 targets are measured.
   pairs across all types.
 - `.agents/benchmarks.md` records every §10 row against its target.
 - `R CMD check` passes on the quick profile.
+
+  Recorded on 2026-10-27:
+
+  - The full round trip on 10⁵ pairs runs as `tools/run-sweep`, outside
+    the suite: 0 failures in 576 s on the final code. The suite runs 2,000
+    of them where `ZUDIFF_EXHAUSTIVE=true` and 300 elsewhere; 10⁴ in the
+    suite had cost 105 s on every R CMD check leg.
+  - Every §10 target is met; the text row varies with `diffobj`'s own time
+    and met 5× in two of three runs (`.agents/benchmarks.md`).
+  - The interrupt tests use random vectors over three values, not two
+    disjoint ones: discarding unmatched elements (design §6.3), added here
+    for speed, makes disjoint vectors trivial. Design §9 records it.
+  - The `max_cost` comparison on the corpus confirms design Q1.
 
 **Design.** §6.5 (input), §9, §10, §12, D7.
 

@@ -9,6 +9,12 @@
 * `diff_hunks()` groups changes with context, and `diff_unified()` writes
   a unified diff that GNU `patch` and `git apply` apply. A `zudiff` object
   prints as one, capped at 50 lines.
+* `patch_parse()` reads unified diffs, from `diff_unified()`, GNU diff or
+  `git diff`, and `patch_apply()` applies one with exact context.
+* On two versions of a text, lines that occur only on one side are set
+  aside before the search, as GNU diff does, which keeps the script
+  minimal and halves the time on typical edits; identical inputs skip the
+  search.
 * `diff_vec(algorithm = "patience")` aligns the elements that occur once
   on each side first, which keeps functions and blocks of text together.
 * `diff_edits()` lists its runs as 1-based starts and lengths,

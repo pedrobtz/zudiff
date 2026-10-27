@@ -1,32 +1,36 @@
 #!/usr/bin/env Rscript
-# Times the operations of design §10 and prints a Markdown table for
-# .agents/benchmarks.md. Run from the package root, against an installed
-# zudiff:
+# Times the operations of design §10 and compares max_cost heuristics, and
+# prints Markdown tables for .agents/benchmarks.md. Run from the package
+# root, against an installed zudiff:
 #
-#   tools/run-benchmarks            # every row zudiff can run today
+#   tools/run-benchmarks
 #
-# Rows whose zudiff function does not exist yet are timed for the
-# comparison only (diffobj, match()), which is the Stage 1 baseline.
-# zugojson's empty call is timed when zugojson is installed.
+# diffobj is the comparison for text; zugojson's empty call is timed when
+# zugojson is installed. The heuristic corpus is the plain-text NEWS, FAQ
+# and COPYRIGHTS files that ship with R, edited at several rates.
 
 suppressPackageStartupMessages({
   library(zudiff)
   library(bench)
 })
 
-has <- function(fn) exists(fn, envir = asNamespace("zudiff"), inherits = FALSE)
-row <- function(operation, what, b) {
-  data.frame(
-    operation = operation, what = what,
-    median = format(b$median), mem = format(b$mem_alloc)
-  )
+mark <- function(...) {
+  suppressWarnings(bench::mark(..., check = FALSE, min_iterations = 5, filter_gc = FALSE))
 }
-mark <- function(...) bench::mark(..., check = FALSE, min_iterations = 5, filter_gc = FALSE)
+ms <- function(t) as.numeric(t) * 1000
+table_out <- function(df) {
+  cat("| ", paste(names(df), collapse = " | "), " |\n", sep = "")
+  cat("|", strrep(" --- |", ncol(df)), "\n", sep = "")
+  for (i in seq_len(nrow(df))) {
+    cat("| ", paste(vapply(df[i, ], as.character, ""), collapse = " | "), " |\n", sep = "")
+  }
+  cat("\n")
+}
 
 set.seed(20261027)
-rows <- list()
 
-# 10^5-line texts, 1 % of lines changed.
+# --- design §10 ---------------------------------------------------------
+
 n <- 1e5
 old <- sprintf("line %d: %s", seq_len(n), vapply(seq_len(n), function(i) {
   paste(sample(letters, 8, TRUE), collapse = "")
@@ -34,23 +38,117 @@ old <- sprintf("line %d: %s", seq_len(n), vapply(seq_len(n), function(i) {
 new <- old
 at <- sample(n, n / 100)
 new[at] <- paste(new[at], "changed")
-rows[["ses"]] <- row("10^5 lines, 1 % changed", "diffobj::ses()", mark(diffobj::ses(old, new)))
 x <- c(old, new)
-rows[["match_text"]] <- row("10^5 lines, 1 % changed", "match(x, x)", mark(match(x, x)))
+text <- mark(
+  myers = diff_vec(old, new),
+  patience = diff_vec(old, new, algorithm = "patience"),
+  diffobj = diffobj::ses(old, new),
+  match = match(x, x)
+)
+t_text <- setNames(ms(text$median), as.character(text$expression))
 
-# Two identical 10^6-element vectors.
+raw_a <- as.raw(sample(0:255, 1e7, TRUE))
+raw_b <- raw_a
+raw_b[sample(1e7, 100)] <- as.raw(1)
+t_raw <- ms(mark(diff_vec(raw_a, raw_b))$median)
+
 v <- sample.int(1e5, 1e6, TRUE)
-x <- c(v, v)
-rows[["match_id"]] <- row("identical 10^6 integers", "match(x, x)", mark(match(x, x)))
-vc <- as.character(v[seq_len(1e5)])
-rows[["ses_id"]] <- row("identical 10^5 strings", "diffobj::ses()", mark(diffobj::ses(vc, vc)))
+w <- v
+w[[1]] <- w[[1]]
+y <- c(v, w)
+same <- mark(diff = diff_vec(v, w), match = match(y, y))
+t_same <- setNames(ms(same$median), as.character(same$expression))
 
-# Empty call: one round trip through goose_r_run() and back.
-rows[["empty"]] <- row("empty call", "zudiff probe_index(1)", mark(zudiff:::probe_index(1)))
+# The empty call is the .Call entry point of a trivial export, which is
+# the call machinery both packages share; their R test wrappers differ.
+probe <- zudiff:::zudiff_c_probe_index
+empty <- mark(zudiff = .Call(probe, 1L))
+t_empty <- c(zudiff = ms(empty$median))
 if (requireNamespace("zugojson", quietly = TRUE)) {
-  rows[["empty_zj"]] <- row("empty call", "zugojson index_probe(1)", mark(zugojson:::index_probe(1)))
+  zj <- get("zugojson_c_index_probe", asNamespace("zugojson"))
+  t_empty[["zugojson"]] <- ms(mark(.Call(zj, 1L))$median)
 }
 
-out <- do.call(rbind, rows)
-cat("| Operation | What | Median | Memory |\n| --- | --- | --- | --- |\n")
-cat(sprintf("| %s | %s | %s | %s |\n", out$operation, out$what, out$median, out$mem), sep = "")
+fmt <- function(x, d = 1) formatC(x, format = "f", digits = d)
+rows <- data.frame(
+  Operation = c(
+    "10^5-line texts, 1 % of lines changed",
+    "same, patience",
+    "same, `match()` share of the total",
+    "two 10 MB raw vectors, 100 scattered edits",
+    "two identical 10^6-element vectors",
+    "empty call"
+  ),
+  Target = c(
+    "5x faster than `diffobj::ses()`",
+    "(not a target)",
+    "recorded",
+    "under 100 ms",
+    "under 10 ms beyond `match()`",
+    "within 10 % of `zugojson`'s"
+  ),
+  Measured = c(
+    sprintf("%s ms; diffobj %s ms: %sx", fmt(t_text[["myers"]]), fmt(t_text[["diffobj"]]), fmt(t_text[["diffobj"]] / t_text[["myers"]])),
+    sprintf("%s ms: %sx", fmt(t_text[["patience"]]), fmt(t_text[["diffobj"]] / t_text[["patience"]])),
+    sprintf("%s ms of %s ms (%s %%)", fmt(t_text[["match"]]), fmt(t_text[["myers"]]), fmt(100 * t_text[["match"]] / t_text[["myers"]], 0)),
+    sprintf("%s ms", fmt(t_raw)),
+    sprintf("%s ms; `match()` alone %s ms", fmt(t_same[["diff"]], 2), fmt(t_same[["match"]])),
+    if (length(t_empty) == 2) {
+      sprintf("%s us; zugojson %s us (%+.0f %%)", fmt(1000 * t_empty[["zudiff"]], 2), fmt(1000 * t_empty[["zugojson"]], 2), 100 * (t_empty[["zudiff"]] / t_empty[["zugojson"]] - 1))
+    } else {
+      sprintf("%s us; zugojson not installed", fmt(1000 * t_empty[["zudiff"]], 2))
+    }
+  )
+)
+table_out(rows)
+
+# --- max_cost heuristics (design Q1) -------------------------------------
+
+doc <- R.home("doc")
+files <- file.path(doc, c("NEWS", "NEWS.1", "NEWS.2", "NEWS.3", "FAQ", "COPYRIGHTS"))
+files <- files[file.exists(files)]
+edit_lines <- function(lines, rate) {
+  k <- max(1L, round(rate * length(lines)))
+  out <- lines
+  out[sample(length(out), k %/% 2)] <- "replaced line"
+  out <- out[-sample(length(out), k %/% 4)]
+  ins <- sort(sample(length(out), k %/% 4))
+  for (j in rev(ins)) out <- append(out, sprintf("inserted %d", j), after = j)
+  out
+}
+heuristics <- list(
+  gnu = function(n, m) NULL,
+  git = function(n, m) max(256, sqrt(n + m + 3)),
+  rfc = function(n, m) max(256, 8 * sqrt(n + m))
+)
+results <- list()
+for (f in files) {
+  lines <- readLines(f, warn = FALSE)
+  for (rate in c(0.01, 0.1, 0.3, 0.5)) {
+    edited <- edit_lines(lines, rate)
+    best <- diff_vec(lines, edited, max_cost = Inf)$distance
+    for (h in names(heuristics)) {
+      cost <- heuristics[[h]](length(lines), length(edited))
+      b <- mark(d = diff_vec(lines, edited, max_cost = cost))
+      d <- diff_vec(lines, edited, max_cost = cost)
+      results[[length(results) + 1]] <- data.frame(
+        heuristic = h, rate = rate, file = basename(f),
+        ms = ms(b$median), excess = d$distance / best - 1, minimal = d$minimal
+      )
+    }
+  }
+}
+res <- do.call(rbind, results)
+summary_rows <- do.call(rbind, lapply(split(res, list(res$heuristic, res$rate)), function(r) {
+  data.frame(
+    `max_cost` = r$heuristic[[1]],
+    `lines changed` = sprintf("%.0f %%", 100 * r$rate[[1]]),
+    `total ms` = fmt(sum(r$ms)),
+    `minimal` = sprintf("%d of %d", sum(r$minimal), nrow(r)),
+    `worst excess` = sprintf("%.2f %%", 100 * max(r$excess)),
+    check.names = FALSE
+  )
+}))
+summary_rows <- summary_rows[order(summary_rows$`lines changed`, summary_rows$`max_cost`), ]
+cat(sprintf("Corpus: %s (%d lines in all).\n\n", paste(basename(files), collapse = ", "), sum(vapply(files, function(f) length(readLines(f, warn = FALSE)), 0L))))
+table_out(summary_rows)
