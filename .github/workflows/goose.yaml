@@ -3,8 +3,8 @@
 # - regenerate: builds the Goose compiler at tools/goose/PIN and verifies
 #   that the committed generated C is exactly what tools/goose and the pin
 #   produce, so nobody edits src/zudiff_goose.c by hand.
-# - symbols: builds the package and fails on any symbol that can end the
-#   R process or write to stdout or stderr.
+# - symbols: builds the package on Linux, macOS and Windows and fails on
+#   any symbol that can end the R process or write to stdout or stderr.
 on:
   push:
     branches: [main, master]
@@ -40,12 +40,23 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v4
       - uses: r-lib/actions/setup-r@v2
       - name: Build the shared object
         run: R CMD INSTALL --no-test-load -l "$RUNNER_TEMP" .
+      # Windows: the package's own objects, which the install leaves in
+      # src/; the DLL also holds MinGW's start-up code (tools/check-symbols.sh).
       - name: Check for forbidden symbols
-        run: tools/check-symbols.sh "$RUNNER_TEMP/zudiff/libs/zudiff.so"
+        run: |
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            command -v nm >/dev/null || export PATH="$(ls -d /c/rtools4*/x86_64-w64-mingw32.static.posix/bin | tail -1):$PATH"
+            tools/check-symbols.sh src/*.o
+          else
+            tools/check-symbols.sh "$RUNNER_TEMP/zudiff/libs/zudiff.so"
+          fi

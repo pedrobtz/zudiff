@@ -1,7 +1,7 @@
-# The shared object exports R's entry point and nothing else, so the Goose
+# The shared object exports R's entry points and nothing else, so the Goose
 # runtime's gs_* symbols cannot clash with another package's copy.
 
-test_that("the shared object exports R_init_zudiff only", {
+test_that("the shared object exports R_init_zudiff and R_unload_zudiff only", {
   skip_on_cran()
   skip_on_covr()
   skip_on_os("windows")
@@ -15,5 +15,5 @@ test_that("the shared object exports R_init_zudiff only", {
   }
   out <- system2(nm, args, stdout = TRUE)
   syms <- sub("^_", "", sub(".* ", "", out[nzchar(out)]))
-  expect_identical(syms, "R_init_zudiff")
+  expect_setequal(syms, c("R_init_zudiff", "R_unload_zudiff"))
 })

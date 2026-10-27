@@ -22,12 +22,13 @@ jobs:
       # Quick on each push to a pull request, full after merge. The
       # `full-ci` label runs the full set on a pull request before merging.
       profile: ${{ github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'full-ci') && 'quick' || 'full' }}
-      # The default matrix without Windows until roadmap Stage 7: the Goose
-      # runtime copied from zugojson is POSIX only (mmap, mprotect,
-      # sigaction), and DESCRIPTION says OS_type: unix. Stage 7 restores the
-      # Windows runner and adds the Windows R-devel row.
+      # The default matrix plus Windows R-devel, the combination CRAN's own
+      # Windows R-devel check runs, which nothing else here covers. The row
+      # runs in the full profile only.
       runners: >-
         [{"os": "macos-latest", "r": "release"},
+         {"os": "windows-latest", "r": "release"},
+         {"os": "windows-latest", "r": "devel"},
          {"os": "ubuntu-latest", "r": "release"},
          {"os": "ubuntu-latest", "r": "oldrel-1"}]
       # The 10^4-pair property sweeps run here, and not under gctorture or
