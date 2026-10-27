@@ -9,6 +9,13 @@
   linear space, and `max_cost` trades minimality for time as GNU diff
   does; the result records whether it is minimal. Ctrl-C stops a long
   diff.
+- [`diff_text()`](https://pedrobtz.github.io/zudiff/reference/diff_text.md)
+  diffs two strings line by line, keeping line endings.
+- [`diff_hunks()`](https://pedrobtz.github.io/zudiff/reference/diff_hunks.md)
+  groups changes with context, and
+  [`diff_unified()`](https://pedrobtz.github.io/zudiff/reference/diff_unified.md)
+  writes a unified diff that GNU `patch` and `git apply` apply. A
+  `zudiff` object prints as one, capped at 50 lines.
 - `diff_vec(algorithm = "patience")` aligns the elements that occur once
   on each side first, which keeps functions and blocks of text together.
 - [`diff_edits()`](https://pedrobtz.github.io/zudiff/reference/diff_edits.md)

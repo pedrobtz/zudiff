@@ -35,9 +35,13 @@ and
 [`diff_apply()`](https://pedrobtz.github.io/zudiff/reference/diff_apply.md)
 work, with linear-space Myers, GNU diff’s cost limit, patience diff and
 Ctrl-C in Goose (greedy Myers stays as the tests’ reference, algorithm
-9); text, hunks, unified diffs and patches are not built yet. The
-roadmap in `.agents/roadmap.md` takes it to v0.1.0. It is built by hand
-on `zugojson`’s pattern, independently of `zugoose` (design D1, revised
+9),
+[`diff_text()`](https://pedrobtz.github.io/zudiff/reference/diff_text.md),
+[`diff_hunks()`](https://pedrobtz.github.io/zudiff/reference/diff_hunks.md),
+[`diff_unified()`](https://pedrobtz.github.io/zudiff/reference/diff_unified.md)
+and printing; reading and applying patches is not built yet. The roadmap
+in `.agents/roadmap.md` takes it to v0.1.0. It is built by hand on
+`zugojson`’s pattern, independently of `zugoose` (design D1, revised
 2026-10-26).
 
 ## Stage tracking
@@ -186,15 +190,18 @@ into `INTEGER(x)`), never copied. `src/Makevars` compiles with
   implementations in Python, Java, Go or Node usually ship a test
   corpus. Use it as an oracle rather than inventing cases by hand. There
   is no diff corpus to borrow, so git is the oracle where it is
-  installed (`git diff --no-index`, `helper-git.R`); GNU `patch` joins
-  it in Stage 5. Hunks may differ from git’s by tie-breaking, so tests
-  compare edit distances, and exact blocks only on chosen fixtures.
+  installed (`git diff --no-index`, `git apply`), and GNU `patch` where
+  it is (`helper-patch.R`; macOS’s own `patch` is not GNU’s, so that
+  test runs on Linux). Hunks may differ from git’s by tie-breaking, so
+  tests compare edit distances, and exact blocks only on chosen
+  fixtures.
 - **Helpers live in `tests/testthat/helper-*.R`.** `helper-generate.R`
   draws random pairs of every supported type and defines `exhaustive()`;
   `helper-reference.R` is the O(NM) edit-distance reference and the
   greedy core; `helper-git.R` turns `git diff -U0` and a `zudiff` object
-  into comparable change blocks.
-- **Keep the suite inside the CRAN time budget.** About 32 s locally on
+  into comparable change blocks; `helper-patch.R` applies a unified diff
+  with GNU `patch` or `git apply` and holds the text fixtures.
+- **Keep the suite inside the CRAN time budget.** About 34 s locally on
   2026-10-27. The large sweeps run only where `ZUDIFF_EXHAUSTIVE=true`,
   which the R CMD check caller sets and gctorture and valgrind do not.
 

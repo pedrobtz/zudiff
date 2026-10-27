@@ -13,18 +13,25 @@ diff_apply(old, d)
 
 - old:
 
-  The vector the diff was computed from, or one of the same length.
+  The vector the diff was computed from, or one of the same length. For
+  a
+  [`diff_text()`](https://pedrobtz.github.io/zudiff/reference/diff_text.md)
+  result, the string.
 
 - d:
 
   A `zudiff` object, from
-  [`diff_vec()`](https://pedrobtz.github.io/zudiff/reference/diff_vec.md).
+  [`diff_vec()`](https://pedrobtz.github.io/zudiff/reference/diff_vec.md)
+  or
+  [`diff_text()`](https://pedrobtz.github.io/zudiff/reference/diff_text.md).
 
 ## Value
 
 The vector `d` turns `old` into. For atomic vectors it is identical to
 `new`; for factors, it combines `old`'s and `new`'s levels as
-[`c()`](https://rdrr.io/r/base/c.html) does.
+[`c()`](https://rdrr.io/r/base/c.html) does. For a
+[`diff_text()`](https://pedrobtz.github.io/zudiff/reference/diff_text.md)
+result, the new string.
 
 ## Examples
 
