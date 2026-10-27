@@ -124,6 +124,10 @@ and only `R_init_zudiff` is marked visible, which `test-abi.R` checks.
 - **The shipped C is generated.** `src/zudiff_goose.c` comes from
   `tools/goose/zudiff.goose` through `tools/regenerate.sh`. Edit the Goose
   source and regenerate; CI fails on a hand edit.
+- **Regenerate on macOS.** The compiler's output depends on the C++
+  standard library: with libstdc++ (Linux) some typedefs come out in a
+  different order than with libc++ (macOS). CI's `regenerate` job runs on
+  macOS to match.
 - **The Goose pieces copied in stay Apache-2.0**, while `zudiff`'s own code
   is MIT. Keep the two licences declared in `inst/COPYRIGHTS`.
 - **No R API inside `goose_r_run()`.** Nothing Goose calls may allocate R

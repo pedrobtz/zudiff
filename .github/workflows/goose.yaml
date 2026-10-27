@@ -16,7 +16,12 @@ permissions: read-all
 
 jobs:
   regenerate:
-    runs-on: ubuntu-latest
+    # macOS, because the Goose compiler's output depends on the C++
+    # standard library: it emits some typedefs in the order of an
+    # unordered_map keyed by strings, and libc++ and libstdc++ hash strings
+    # differently. The committed C is generated on macOS (libc++), so the
+    # check must run there too. Deterministic on either library.
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
       - name: Check out Goose at the pin
