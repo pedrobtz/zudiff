@@ -9,7 +9,7 @@
 
 set -eu
 so=${1:?usage: $0 <shared object>}
-bad=$(nm -u "$so" | awk '{print $2}' | sed 's/@.*//' |
+bad=$(nm -u "$so" | awk '{print $NF}' | sed 's/@.*//' |
   grep -E '^_?(abort|exit|_exit|_Exit|quick_exit|stdout|stderr|__stdoutp|__stderrp|printf|puts|putchar|fprintf|vprintf|fputs|fwrite|sprintf|vsprintf|rand|srand|random|srandom)$' || true)
 if [ -n "$bad" ]; then
   echo "forbidden symbols in $so:" >&2

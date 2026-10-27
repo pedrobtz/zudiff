@@ -11,4 +11,7 @@
    an R error raised inside it would skip the restore. */
 int goose_r_run(void (*body)(void *), void *data, char *err, size_t errlen);
 
+/* Bytes in use across all data stacks. Call outside goose_r_run(). */
+size_t goose_r_stack_used(void);
+
 #endif

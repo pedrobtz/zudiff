@@ -28,3 +28,14 @@ test_that("an integer vector reaches Goose borrowed and whole", {
   x <- c(.Machine$integer.max, .Machine$integer.max, -5L)
   expect_identical(probe_sum(x), 2 * .Machine$integer.max - 5)
 })
+
+test_that("a failure rewinds the data stacks", {
+  base <- stack_used()
+  expect_identical(probe_stack(1e5, FALSE), 99999)
+  expect_identical(stack_used(), base)
+  for (k in 1:10) {
+    expect_error(probe_stack(1e5, TRUE), class = "zudiff_runtime_error")
+    expect_identical(stack_used(), base)
+  }
+  expect_identical(probe_stack(10, FALSE), 9)
+})

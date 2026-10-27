@@ -25,3 +25,14 @@ export fn zudiff_probe_sum(a: const i32[:]) -> i64 {
     for x in a { s += x; }
     return s;
 }
+
+// Test hook: fills a local dynamic array, which lives on a Goose data
+// stack, then optionally fails with a bounds error. A failure skips the
+// array's release, so only goose_r_run()'s rewind returns the stack to
+// where it was.
+export fn zudiff_probe_stack(n: i64, fail: bool) -> i64 {
+    var v: i64[>..] = [];
+    for i in n { v.push(i); }
+    if fail { return v[n]; }
+    return v[n - 1];
+}

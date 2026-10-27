@@ -20,6 +20,7 @@ extern "C" {
 void goose_init(int argc, char **argv);
 int64_t zudiff_probe_index(int64_t gs_export_arg0);
 int64_t zudiff_probe_sum(sl_i32 gs_export_arg0_2);
+int64_t zudiff_probe_stack(int64_t gs_export_arg0_3, uint8_t gs_export_arg1);
 #ifdef __cplusplus
 }
 #endif

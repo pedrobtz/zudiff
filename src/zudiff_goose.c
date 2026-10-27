@@ -1374,6 +1374,7 @@ GS_API uint8_t gs_trim_memory(void);
 /* ---- prototypes ---- */
 static int64_t zudiff_probe_index_g(int64_t p0);
 static int64_t zudiff_probe_sum_g(void *p0_data, int64_t p0_len);
+static int64_t zudiff_probe_stack_g(int64_t p0, uint8_t p1, int64_t gs_sp);
 
 /* ---- code ---- */
 static int64_t zudiff_probe_index_g(int64_t i_g) {
@@ -1407,12 +1408,43 @@ static int64_t zudiff_probe_sum_g(void *a_g_data, int64_t a_g_len) {
     return t4;
 }
 
+static int64_t zudiff_probe_stack_g(int64_t n_g, uint8_t fail_g, int64_t gs_sp) {
+    gs_rhdr v_g;
+    v_g.base = GS(gs_sp + 0)->top; v_g.len = 0;
+    v_g.len = 0;
+    int64_t t0 = n_g;
+    uint8_t *t10 = GS(gs_sp + 0)->top;
+    for (int64_t i_g = 0; i_g < t0; i_g++) {
+        int64_t t3 = i_g;
+        int64_t *t4 = (int64_t *)t10;
+        *(int64_t *)t10 = t3;
+        t10 += 8;
+        v_g.len++;
+    }
+    GS(gs_sp + 0)->top = t10;
+    if (fail_g) {
+        int64_t t5;
+        int64_t t6 = n_g;
+        t5 = (((int64_t *)((v_g.base)))[GS_IDX((int64_t)(t6), (v_g.len), gs_file0, 36)]);
+        GS(gs_sp + 0)->top = v_g.base;
+        return t5;
+    }
+    int64_t t7;
+    int64_t t8 = gs_sub_i64((int64_t)(n_g), 1, gs_file0, 37);
+    t7 = (((int64_t *)((v_g.base)))[GS_IDX((int64_t)(t8), (v_g.len), gs_file0, 37)]);
+    GS(gs_sp + 0)->top = v_g.base;
+    return t7;
+    GS_UNREACHABLE(gs_file0, 33);
+    int64_t t9 = {0};
+    return t9;
+}
+
 static void gs_init_globals(void) {
 }
 
 static void gs_program_init(int argc, char **argv) {
     if (gs_program_initialized) return;
-    gs_rt_init(argc, argv, 0, 0, 0);
+    gs_rt_init(argc, argv, 1, 1, 0);
     gs_gl = &gs_globals_main;
     gs_init_globals();
     gs_program_initialized = 1;
@@ -1433,5 +1465,11 @@ int64_t zudiff_probe_sum(sl_i32 gs_export_arg0_2) {
     if (!gs_program_initialized)
         gs_panic("goose_init must be called before exported functions");
     return zudiff_probe_sum_g(gs_export_arg0_2.data, gs_export_arg0_2.len);
+}
+
+int64_t zudiff_probe_stack(int64_t gs_export_arg0_3, uint8_t gs_export_arg1) {
+    if (!gs_program_initialized)
+        gs_panic("goose_init must be called before exported functions");
+    return zudiff_probe_stack_g(gs_export_arg0_3, gs_export_arg1, 0);
 }
 

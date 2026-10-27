@@ -3,6 +3,7 @@
 
 test_that("the shared object exports R_init_zudiff only", {
   skip_on_cran()
+  skip_on_covr()
   skip_on_os("windows")
   nm <- Sys.which("nm")
   skip_if(!nzchar(nm), "nm is not available")

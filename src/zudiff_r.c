@@ -26,11 +26,14 @@
 #define STR_(x) #x
 #define STR(x) STR_(x)
 
+/* value may be freshly allocated by the caller, so it is protected
+   before the list is. */
 static SEXP result(SEXP value, const char *err) {
+  PROTECT(value);
   SEXP out = PROTECT(Rf_allocVector(VECSXP, 2));
-  if (value != R_NilValue) SET_VECTOR_ELT(out, 0, value);
+  SET_VECTOR_ELT(out, 0, value);
   if (err) SET_VECTOR_ELT(out, 1, Rf_mkString(err));
-  UNPROTECT(1);
+  UNPROTECT(2);
   return out;
 }
 
@@ -72,6 +75,29 @@ SEXP zudiff_c_probe_sum(SEXP x) {
   return result(Rf_ScalarReal((double) c.v), NULL);
 }
 
+typedef struct {
+  int64_t n, v;
+  uint8_t fail;
+} probe_stack_call;
+
+static void probe_stack_body(void *p) {
+  probe_stack_call *c = p;
+  c->v = zudiff_probe_stack(c->n, c->fail);
+}
+
+SEXP zudiff_c_probe_stack(SEXP n, SEXP fail) {
+  probe_stack_call c = {(int64_t) Rf_asInteger(n), 0,
+                        (uint8_t) Rf_asLogical(fail)};
+  char err[ERRLEN];
+  if (goose_r_run(probe_stack_body, &c, err, sizeof err))
+    return result(R_NilValue, err);
+  return result(Rf_ScalarReal((double) c.v), NULL);
+}
+
+SEXP zudiff_c_stack_used(void) {
+  return Rf_ScalarReal((double) goose_r_stack_used());
+}
+
 /* --- information -------------------------------------------------------- */
 
 SEXP zudiff_c_goose_info(void) {
@@ -94,6 +120,8 @@ static void init_body(void *unused) {
 static const R_CallMethodDef call_methods[] = {
     {"zudiff_c_probe_index", (DL_FUNC) &zudiff_c_probe_index, 1},
     {"zudiff_c_probe_sum", (DL_FUNC) &zudiff_c_probe_sum, 1},
+    {"zudiff_c_probe_stack", (DL_FUNC) &zudiff_c_probe_stack, 2},
+    {"zudiff_c_stack_used", (DL_FUNC) &zudiff_c_stack_used, 0},
     {"zudiff_c_goose_info", (DL_FUNC) &zudiff_c_goose_info, 0},
     {NULL, NULL, 0}};
 

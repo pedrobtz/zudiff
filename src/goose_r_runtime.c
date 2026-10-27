@@ -6,7 +6,8 @@
    Copied from zugojson (https://github.com/pedrobtz/zugojson), file
    src/goose_r_runtime.c at commit 4220db519825f9a4aca837d9d44f55170c7f54f4,
    for the same Goose pin. Changes from that copy, newest last:
-   - none yet.
+   - goose_r_stack_used(), so the tests can check that a failure rewinds
+     the data stacks (2026-10-27).
 
    Differences from the stock runtime (goose src/runtime/runtime_impl.h):
    - Nothing ends the process. Every runtime failure jumps back to
@@ -247,4 +248,13 @@ int goose_r_run(void (*body)(void *), void *data, char *err, size_t errlen) {
     sigaction(SIGBUS, &prev_bus, NULL);
 #endif
     return failed;
+}
+
+/* Bytes in use across all data stacks, for the tests: after any call,
+   failed or not, it must be back where it was before. */
+size_t goose_r_stack_used(void) {
+    size_t used = 0;
+    for (long i = 0; i < nregions; i++)
+        used += (size_t)(regions[i].stack->top - regions[i].base);
+    return used;
 }
