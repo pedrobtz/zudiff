@@ -1,3 +1,3 @@
-# zudiff (development version)
+# zudiff 0.0.0.9000
 
-* Initial CRAN submission.
+* `zudiff_info()` reports the package version.
