@@ -1,5 +1,6 @@
 # Changelog
 
-## zudiff (development version)
+## zudiff 0.0.0.9000
 
-- Initial CRAN submission.
+- [`zudiff_info()`](https://pedrobtz.github.io/zudiff/reference/zudiff_info.md)
+  reports the package version.
