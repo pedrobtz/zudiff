@@ -2,12 +2,19 @@
 
 test_that("diff_text() splits lines with their endings and round-trips", {
   withr::local_seed(1)
+  prop <- property()
   for (f in text_fixtures(100)) {
     for (algorithm in c("myers", "patience")) {
       d <- diff_text(f$old, f$new, algorithm = algorithm)
-      expect_identical(diff_apply(f$old, d), f$new)
+      prop$check(
+        identical(diff_apply(f$old, d), f$new),
+        algorithm,
+        ": ",
+        deparse(f)
+      )
     }
   }
+  prop$done()
   expect_identical(zudiff:::split_lines("a\nb"), c("a\n", "b"))
   expect_identical(zudiff:::split_lines("a\r\n\nb\n"), c("a\r\n", "\n", "b\n"))
   expect_identical(zudiff:::split_lines(""), character())
@@ -61,23 +68,32 @@ test_that("unified output is GNU's format", {
 test_that("GNU patch applies diff_unified()'s output", {
   skip_if_not(gnu_patch_available(), "GNU patch is not available")
   withr::local_seed(2)
+  prop <- property()
   for (f in text_fixtures(60)) {
     for (context in c(0L, 3L)) {
       d <- diff_text(f$old, f$new)
       if (diff_identical(d)) {
         next
       }
-      expect_identical(
-        apply_with_gnu_patch(f$old, diff_unified(d, context = context)),
-        f$new
+      prop$check(
+        identical(
+          apply_with_gnu_patch(f$old, diff_unified(d, context = context)),
+          f$new
+        ),
+        "context ",
+        context,
+        ": ",
+        deparse(f)
       )
     }
   }
+  prop$done()
 })
 
 test_that("git apply applies diff_unified()'s output", {
   skip_if_not(git_available(), "git is not available")
   withr::local_seed(3)
+  prop <- property()
   for (f in text_fixtures(60)) {
     for (algorithm in c("myers", "patience")) {
       d <- diff_text(f$old, f$new, algorithm = algorithm)
@@ -85,9 +101,15 @@ test_that("git apply applies diff_unified()'s output", {
         next
       }
       patch <- diff_unified(d, old_name = "a/f", new_name = "b/f")
-      expect_identical(apply_with_git(f$old, patch), f$new)
+      prop$check(
+        identical(apply_with_git(f$old, patch), f$new),
+        algorithm,
+        ": ",
+        deparse(f)
+      )
     }
   }
+  prop$done()
 })
 
 test_that("the print method caps and clips", {

@@ -83,36 +83,42 @@ diff_hunks <- function(d, context = 3L) {
   # insert) or one equal row. A gap short enough for both contexts to meet
   # joins two changes into one hunk.
   between <- changed[-1] - 1L
-  gap <- ifelse(between == changed[-length(changed)], 0L, e$old_len[between])
-  starts <- c(TRUE, gap > 2 * context)
-  group <- cumsum(starts)
-  lapply(split(changed, group), function(rows) {
-    first <- rows[[1]]
+  gap <- e$old_len[between] * (between != changed[-length(changed)])
+  group <- cumsum(c(TRUE, gap > 2 * context))
+  firsts <- changed[!duplicated(group)]
+  lasts <- changed[!duplicated(group, fromLast = TRUE)]
+  lapply(seq_along(firsts), function(k) {
+    rows <- firsts[[k]]:lasts[[k]]
+    old_start <- e$old_start[rows]
+    new_start <- e$new_start[rows]
+    old_len <- e$old_len[rows]
+    new_len <- e$new_len[rows]
+    op <- e$op[rows]
+    if (rows[[1]] > 1L && context > 0) {
+      r <- rows[[1]] - 1L
+      keep <- min(e$old_len[[r]], context)
+      op <- c("equal", op)
+      old_start <- c(e$old_start[[r]] + e$old_len[[r]] - keep, old_start)
+      new_start <- c(e$new_start[[r]] + e$new_len[[r]] - keep, new_start)
+      old_len <- c(keep, old_len)
+      new_len <- c(keep, new_len)
+    }
     last <- rows[[length(rows)]]
-    edits <- e[first:last, ]
-    if (first > 1L && context > 0) {
-      lead <- e[first - 1L, ]
-      keep <- min(lead$old_len, context)
-      lead$old_start <- lead$old_start + lead$old_len - keep
-      lead$new_start <- lead$new_start + lead$new_len - keep
-      lead$old_len <- keep
-      lead$new_len <- keep
-      edits <- rbind(lead, edits)
-    }
     if (last < nrow(e) && context > 0) {
-      trail <- e[last + 1L, ]
-      keep <- min(trail$old_len, context)
-      trail$old_len <- keep
-      trail$new_len <- keep
-      edits <- rbind(edits, trail)
+      r <- last + 1L
+      keep <- min(e$old_len[[r]], context)
+      op <- c(op, "equal")
+      old_start <- c(old_start, e$old_start[[r]])
+      new_start <- c(new_start, e$new_start[[r]])
+      old_len <- c(old_len, keep)
+      new_len <- c(new_len, keep)
     }
-    rownames(edits) <- NULL
     list(
-      old_start = edits$old_start[[1]],
-      old_len = sum(edits$old_len),
-      new_start = edits$new_start[[1]],
-      new_len = sum(edits$new_len),
-      edits = edits
+      old_start = old_start[[1]],
+      old_len = sum(old_len),
+      new_start = new_start[[1]],
+      new_len = sum(new_len),
+      edits = new_edits(op, old_start, old_len, new_start, new_len)
     )
   })
 }
@@ -136,7 +142,7 @@ check_context <- function(context) {
 #' Write a diff as a unified diff
 #'
 #' Writes the hunks of a diff in the unified format of GNU diff, which
-#' `patch` and `git apply` read.
+#' `patch`, `git apply` and [patch_apply()] read.
 #'
 #' For a [diff_text()] result, each line is written as it is, and a last
 #' line without a newline is followed by `\ No newline at end of file`. For a
@@ -177,39 +183,31 @@ check_name <- function(x, arg) {
 # The body of a unified diff, one element per output line, each ending in
 # "\n".
 unified_lines <- function(d, hunks) {
-  old <- as_lines(d, d$old)
-  new <- as_lines(d, d$new)
-  out <- character()
-  for (h in hunks) {
-    out <- c(
-      out,
-      sprintf(
-        "@@ -%s +%s @@\n",
-        hunk_range(h$old_start, h$old_len),
-        hunk_range(h$new_start, h$new_len)
-      )
+  out <- vector("list", 2L * length(hunks))
+  for (k in seq_along(hunks)) {
+    h <- hunks[[k]]
+    e <- h$edits
+    from_new <- e$op == "insert"
+    len <- ifelse(from_new, e$new_len, e$old_len)
+    at <- sequence(len, from = ifelse(from_new, e$new_start, e$old_start))
+    side_new <- rep(from_new, len)
+    lines <- character(length(at))
+    lines[!side_new] <- lines_of(d, d$old, at[!side_new])
+    lines[side_new] <- lines_of(d, d$new, at[side_new])
+    prefix <- rep(c(equal = " ", delete = "-", insert = "+")[e$op], len)
+    out[[2L * k - 1L]] <- sprintf(
+      "@@ -%s +%s @@\n",
+      hunk_range(h$old_start, h$old_len),
+      hunk_range(h$new_start, h$new_len)
     )
-    for (i in seq_len(nrow(h$edits))) {
-      r <- h$edits[i, ]
-      if (r$op == "equal") {
-        out <- c(
-          out,
-          mark_lines(" ", old[seq.int(r$old_start, length.out = r$old_len)])
-        )
-      } else if (r$op == "delete") {
-        out <- c(
-          out,
-          mark_lines("-", old[seq.int(r$old_start, length.out = r$old_len)])
-        )
-      } else {
-        out <- c(
-          out,
-          mark_lines("+", new[seq.int(r$new_start, length.out = r$new_len)])
-        )
-      }
-    }
+    out[[2L * k]] <- mark_lines(prefix, lines)
   }
-  out
+  unlist(out)
+}
+
+# Elements at of one side, as lines; only those are formatted.
+lines_of <- function(d, x, at) {
+  as_lines(d, x[at])
 }
 
 # A range in a hunk header: "start,len", with ",1" left out and an empty
@@ -229,6 +227,9 @@ as_lines <- function(d, x) {
   }
   if (is.factor(x)) {
     x <- as.character(x)
+  }
+  if (length(x) == 0L) {
+    return(character())
   }
   paste0(vapply(seq_along(x), function(i) format(x[[i]]), ""), "\n")
 }
