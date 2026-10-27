@@ -24,8 +24,10 @@ decisions marked (C) and its open questions (§15) are still open.
 
 ## Current state
 
-Scaffolded 2026-10-26 with `create-pkg.sh` (C stub in `src/`); no
-functionality yet. The roadmap in `.agents/roadmap.md` takes it to v0.1.0.
+Scaffolded 2026-10-26 with `create-pkg.sh`. As of 2026-10-27, `diff_vec()`,
+`diff_edits()`, `diff_identical()` and `diff_apply()` work, with greedy Myers
+(O(D²) memory) in Goose; the cost limit, interrupts, patience, text and
+patches are not built yet. The roadmap in `.agents/roadmap.md` takes it to v0.1.0.
 It is built by hand on `zugojson`'s pattern, independently of `zugoose`
 (design D1, revised 2026-10-26).
 
