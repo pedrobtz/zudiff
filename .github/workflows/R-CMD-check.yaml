@@ -30,3 +30,7 @@ jobs:
         [{"os": "macos-latest", "r": "release"},
          {"os": "ubuntu-latest", "r": "release"},
          {"os": "ubuntu-latest", "r": "oldrel-1"}]
+      # The 10^4-pair property sweeps run here, and not under gctorture or
+      # valgrind (tests/testthat/helper-generate.R).
+      env: |
+        ZUDIFF_EXHAUSTIVE=true
