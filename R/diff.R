@@ -43,7 +43,8 @@ diff_vec <- function(
 ) {
   algorithm <- check_algorithm(algorithm)
   code <- c(myers = 0L, patience = 1L)[[algorithm]]
-  diff_vec_impl(old, new, algorithm, code, check_max_cost(max_cost))
+  max_cost <- check_max_cost(max_cost)
+  diff_vec_impl(old, new, algorithm, code, max_cost)
 }
 
 # The diff itself. code is the core's algorithm number: 0 for Myers, 1 for
@@ -67,6 +68,11 @@ diff_vec_impl <- function(old, new, algorithm, code, max_cost) {
       "input",
       "`old` and `new` together must be shorter than 2^31 elements."
     )
+  }
+  # Identical inputs are equal element by element under match() too, so
+  # their script is one equal run, and match() is not needed.
+  if (identical(a, b)) {
+    return(new_zudiff(old, new, equal_script(length(a), code), algorithm))
   }
   if (is.raw(a)) {
     ia <- a
@@ -135,6 +141,19 @@ as_diffable <- function(x, arg) {
   x
 }
 
+# The script of two identical inputs of length n. Patience results are
+# never marked minimal (design §6.4).
+equal_script <- function(n, code) {
+  list(
+    op = if (n > 0L) 0L else integer(),
+    old_start = if (n > 0L) 1L else integer(),
+    new_start = if (n > 0L) 1L else integer(),
+    len = if (n > 0L) as.integer(n) else integer(),
+    minimal = code != 1L,
+    distance = 0L
+  )
+}
+
 # The packed script of design §7, as a list.
 unpack_script <- function(packed) {
   head <- readBin(packed, "integer", n = 4L, size = 4L, endian = "little")
@@ -145,19 +164,19 @@ unpack_script <- function(packed) {
     )
   }
   n <- head[[2]]
-  body <- readBin(
-    packed[-(1:16)],
+  all <- readBin(
+    packed,
     "integer",
-    n = 4L * n,
+    n = 4L + 4L * n,
     size = 4L,
     endian = "little"
   )
-  runs <- matrix(body, ncol = 4L, byrow = TRUE)
+  at <- 4L * seq_len(n)
   list(
-    op = runs[, 1],
-    old_start = runs[, 2] + 1L,
-    new_start = runs[, 3] + 1L,
-    len = runs[, 4],
+    op = all[at + 1L],
+    old_start = all[at + 2L] + 1L,
+    new_start = all[at + 3L] + 1L,
+    len = all[at + 4L],
     minimal = head[[3]] == 1L,
     distance = head[[4]]
   )
@@ -202,14 +221,28 @@ new_zudiff <- function(old, new, script, algorithm) {
 #' diff_identical(d)
 diff_edits <- function(d) {
   check_zudiff(d)
-  ops <- c("equal", "delete", "insert")[d$op + 1L]
-  data.frame(
-    op = ops,
+  new_edits(
+    op = c("equal", "delete", "insert")[d$op + 1L],
     old_start = d$old_start,
-    old_len = ifelse(d$op == 2L, 0L, d$len),
+    old_len = d$len * (d$op != 2L),
     new_start = d$new_start,
-    new_len = ifelse(d$op == 1L, 0L, d$len),
-    stringsAsFactors = FALSE
+    new_len = d$len * (d$op != 1L)
+  )
+}
+
+# A data frame of edits, built directly: data.frame() costs hundreds of
+# microseconds, more than the diff of a short vector.
+new_edits <- function(op, old_start, old_len, new_start, new_len) {
+  structure(
+    list(
+      op = op,
+      old_start = old_start,
+      old_len = old_len,
+      new_start = new_start,
+      new_len = new_len
+    ),
+    class = "data.frame",
+    row.names = .set_row_names(length(op))
   )
 }
 

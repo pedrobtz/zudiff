@@ -1,25 +1,16 @@
 # diff_vec(): the round trip, the shape of the script (design §6.2) and the
 # input checks (§8).
 
-expect_round_trip <- function(old, new) {
-  d <- diff_vec(old, new)
-  got <- diff_apply(old, d)
-  if (is.factor(new)) {
-    expect_identical(as.character(got), as.character(new))
-  } else {
-    expect_identical(got, new)
-  }
-  invisible(d)
-}
-
 test_that("applying the script to old gives new, for every type", {
   withr::local_seed(20261027)
+  prop <- property()
   for (type in supported_types) {
     for (i in 1:200) {
       p <- random_pair(type)
-      expect_round_trip(p$old, p$new)
+      prop$check(round_trips(p$old, p$new), type, " pair ", i)
     }
   }
+  prop$done()
 })
 
 test_that("empty and identical inputs give the obvious scripts", {
@@ -35,29 +26,50 @@ test_that("empty and identical inputs give the obvious scripts", {
 
 test_that("runs are maximal and a delete comes before an adjacent insert", {
   withr::local_seed(1)
+  prop <- property()
   for (i in 1:300) {
     p <- random_pair("integer")
     e <- diff_edits(diff_vec(p$old, p$new))
     if (nrow(e) > 1) {
-      expect_false(any(e$op[-1] == e$op[-nrow(e)]))
-      expect_false(any(e$op[-nrow(e)] == "insert" & e$op[-1] == "delete"))
+      prop$check(
+        !any(e$op[-1] == e$op[-nrow(e)]),
+        "pair ",
+        i,
+        ": runs not maximal"
+      )
+      prop$check(
+        !any(e$op[-nrow(e)] == "insert" & e$op[-1] == "delete"),
+        "pair ",
+        i,
+        ": insert before delete"
+      )
     }
   }
+  prop$done()
 })
 
 test_that("diff_edits() ranges are 1-based starts and lengths that tile both inputs", {
   withr::local_seed(2)
+  prop <- property()
   for (i in 1:200) {
     p <- random_pair("character")
     e <- diff_edits(diff_vec(p$old, p$new))
-    expect_named(e, c("op", "old_start", "old_len", "new_start", "new_len"))
-    expect_identical(sum(e$old_len), length(p$old))
-    expect_identical(sum(e$new_len), length(p$new))
-    expect_identical(e$old_start, cumsum(c(1L, e$old_len))[seq_len(nrow(e))])
-    expect_identical(e$new_start, cumsum(c(1L, e$new_len))[seq_len(nrow(e))])
-    expect_true(all(e$old_len[e$op == "insert"] == 0))
-    expect_true(all(e$new_len[e$op == "delete"] == 0))
+    prop$check(
+      identical(
+        names(e),
+        c("op", "old_start", "old_len", "new_start", "new_len")
+      ) &&
+        identical(sum(e$old_len), length(p$old)) &&
+        identical(sum(e$new_len), length(p$new)) &&
+        identical(e$old_start, cumsum(c(1L, e$old_len))[seq_len(nrow(e))]) &&
+        identical(e$new_start, cumsum(c(1L, e$new_len))[seq_len(nrow(e))]) &&
+        all(e$old_len[e$op == "insert"] == 0) &&
+        all(e$new_len[e$op == "delete"] == 0),
+      "pair ",
+      i
+    )
   }
+  prop$done()
 })
 
 test_that("the script is minimal on cases with a known distance", {
@@ -106,4 +118,27 @@ test_that("bad inputs are zudiff_input_error", {
     diff_vec(1:3, 1:3, algorithm = "histogram"),
     class = "zudiff_input_error"
   )
+})
+
+test_that("identical inputs take the shortcut and give the same script as the core", {
+  withr::local_seed(9)
+  for (type in supported_types) {
+    p <- random_pair(type)
+    x <- p$old
+    y <- x[seq_along(x)]
+    for (algorithm in c("myers", "patience")) {
+      fast <- diff_vec(x, y, algorithm = algorithm)
+      expect_true(diff_identical(fast))
+      expect_identical(fast$minimal, algorithm == "myers")
+      expect_identical(diff_apply(x, fast), y)
+      slow <- zudiff:::diff_vec_impl(
+        x,
+        c(y, y[0]),
+        algorithm,
+        if (algorithm == "myers") 0L else 1L,
+        -1
+      )
+      expect_identical(diff_edits(fast), diff_edits(slow))
+    }
+  }
 })

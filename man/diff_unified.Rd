@@ -19,7 +19,7 @@ the two inputs are identical.
 }
 \description{
 Writes the hunks of a diff in the unified format of GNU diff, which
-\code{patch} and \verb{git apply} read.
+\code{patch}, \verb{git apply} and \code{\link[=patch_apply]{patch_apply()}} read.
 }
 \details{
 For a \code{\link[=diff_text]{diff_text()}} result, each line is written as it is, and a last

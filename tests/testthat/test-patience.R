@@ -2,18 +2,19 @@
 
 test_that("applying a patience script to old gives new, for every type", {
   withr::local_seed(20261027)
+  prop <- property()
   for (type in supported_types) {
     for (i in 1:200) {
       p <- random_pair(type)
-      d <- diff_vec(p$old, p$new, algorithm = "patience")
-      got <- diff_apply(p$old, d)
-      if (is.factor(p$new)) {
-        expect_identical(as.character(got), as.character(p$new))
-      } else {
-        expect_identical(got, p$new)
-      }
+      prop$check(
+        round_trips(p$old, p$new, algorithm = "patience"),
+        type,
+        " pair ",
+        i
+      )
     }
   }
+  prop$done()
 })
 
 test_that("patience round-trips on larger inputs with repeats and unique lines", {
@@ -43,12 +44,14 @@ test_that("patience results are marked not minimal", {
 
 test_that("with every element unique, patience is minimal", {
   withr::local_seed(7)
+  prop <- property()
   for (i in 1:300) {
     a <- sample.int(80, sample.int(40, 1))
     b <- sample.int(80, sample.int(40, 1))
     d <- diff_vec(a, b, algorithm = "patience")
-    expect_identical(d$distance, reference_distance(a, b))
+    prop$check(identical(d$distance, reference_distance(a, b)), "pair ", i)
   }
+  prop$done()
 })
 
 test_that("patience moves a function as a block where Myers interleaves it", {

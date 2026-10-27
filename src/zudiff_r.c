@@ -6,9 +6,10 @@
    body function may call R: an R error raised inside goose_r_run() would
    jump over the stack rewind and leave Goose's fault handler installed.
 
-   Each entry point returns list(value, error): error is NULL on success
-   and the failure message otherwise, which R raises as a
-   zudiff_runtime_error (R/core.R). */
+   Each entry point returns its value on success and, on failure, the
+   message as a string, which R raises as a zudiff_runtime_error
+   (R/core.R). No entry point returns a string on success, so the two
+   cannot be confused, and success allocates nothing beyond the value. */
 
 #include <stdint.h>
 #include <string.h>
@@ -27,16 +28,7 @@
 #define STR_(x) #x
 #define STR(x) STR_(x)
 
-/* value may be freshly allocated by the caller, so it is protected
-   before the list is. */
-static SEXP result(SEXP value, const char *err) {
-  PROTECT(value);
-  SEXP out = PROTECT(Rf_allocVector(VECSXP, 2));
-  SET_VECTOR_ELT(out, 0, value);
-  if (err) SET_VECTOR_ELT(out, 1, Rf_mkString(err));
-  UNPROTECT(2);
-  return out;
-}
+static SEXP failure(const char *err) { return Rf_mkString(err); }
 
 /* --- diffs ---------------------------------------------------------------- */
 
@@ -83,14 +75,17 @@ SEXP zudiff_c_diff(SEXP a, SEXP b, SEXP algorithm, SEXP max_cost) {
   c.max_cost = (ISNAN(mc) || mc >= 9223372036854775807.0) ? INT64_MAX
                : mc < 0 ? -1 : (int64_t) mc;
   char err[ERRLEN];
-  int failed = goose_r_run(diff_body, &c, err, sizeof err);
+  /* Short diffs finish too soon to need Ctrl-C caught inside them (R acts
+     on one after the call returns), so only long ones pay for it. */
+  int64_t size = c.bytes ? c.ba.len + c.bb.len : c.ia.len + c.ib.len;
+  int failed = size >= 4096
+                   ? goose_r_run_interruptible(diff_body, &c, err, sizeof err)
+                   : goose_r_run(diff_body, &c, err, sizeof err);
   if (failed == 2) R_CheckUserInterrupt();
-  if (failed) return result(R_NilValue, err);
-  SEXP out = PROTECT(Rf_allocVector(RAWSXP, (R_xlen_t) c.n));
+  if (failed) return failure(err);
+  SEXP out = Rf_allocVector(RAWSXP, (R_xlen_t) c.n);
   if (c.n > 0) memcpy(RAW(out), c.out, (size_t) c.n);
-  SEXP res = result(out, NULL);
-  UNPROTECT(1);
-  return res;
+  return out;
 }
 
 /* --- test hooks --------------------------------------------------------- */
@@ -108,8 +103,8 @@ SEXP zudiff_c_probe_index(SEXP i) {
   probe_index_call c = {(int64_t) Rf_asInteger(i), 0};
   char err[ERRLEN];
   if (goose_r_run(probe_index_body, &c, err, sizeof err))
-    return result(R_NilValue, err);
-  return result(Rf_ScalarReal((double) c.v), NULL);
+    return failure(err);
+  return Rf_ScalarReal((double) c.v);
 }
 
 typedef struct {
@@ -127,8 +122,8 @@ SEXP zudiff_c_probe_sum(SEXP x) {
   probe_sum_call c = {{INTEGER(x), (int64_t) XLENGTH(x)}, 0};
   char err[ERRLEN];
   if (goose_r_run(probe_sum_body, &c, err, sizeof err))
-    return result(R_NilValue, err);
-  return result(Rf_ScalarReal((double) c.v), NULL);
+    return failure(err);
+  return Rf_ScalarReal((double) c.v);
 }
 
 typedef struct {
@@ -146,8 +141,8 @@ SEXP zudiff_c_probe_stack(SEXP n, SEXP fail) {
                         (uint8_t) Rf_asLogical(fail)};
   char err[ERRLEN];
   if (goose_r_run(probe_stack_body, &c, err, sizeof err))
-    return result(R_NilValue, err);
-  return result(Rf_ScalarReal((double) c.v), NULL);
+    return failure(err);
+  return Rf_ScalarReal((double) c.v);
 }
 
 SEXP zudiff_c_test_raise_after(SEXP n) {
