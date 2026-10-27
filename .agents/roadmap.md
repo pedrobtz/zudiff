@@ -30,7 +30,7 @@ then.
 | 4 | [Patience diff](#stage-4--patience-diff) | quick | [#6](https://github.com/pedrobtz/zudiff/issues/6) | [#18](https://github.com/pedrobtz/zudiff/pull/18) | 2026-10-27 |
 | 5 | [Text, hunks and unified output](#stage-5--text-hunks-and-unified-output) | quick | [#7](https://github.com/pedrobtz/zudiff/issues/7) | [#19](https://github.com/pedrobtz/zudiff/pull/19) | 2026-10-27 |
 | 6 | [Patches and benchmarks](#stage-6--patches-and-benchmarks) | quick | [#8](https://github.com/pedrobtz/zudiff/issues/8) | [#20](https://github.com/pedrobtz/zudiff/pull/20) | 2026-10-27 |
-| 7 | [Windows runtime](#stage-7--windows-runtime) | full | [#9](https://github.com/pedrobtz/zudiff/issues/9) | | 2026-10-27 |
+| 7 | [Windows runtime](#stage-7--windows-runtime) | full | [#9](https://github.com/pedrobtz/zudiff/issues/9) | [#21](https://github.com/pedrobtz/zudiff/pull/21) | 2026-10-27 |
 | 8 | [Full CI](#stage-8--full-ci) | full | [#10](https://github.com/pedrobtz/zudiff/issues/10) | | |
 | 9 | [v0.1.0 readiness](#stage-9--v010-readiness) | full | [#11](https://github.com/pedrobtz/zudiff/issues/11) | | |
 
