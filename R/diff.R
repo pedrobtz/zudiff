@@ -226,11 +226,11 @@ diff_identical <- function(d) {
 #' inserted runs from the `new` that `d` was computed against.
 #'
 #' @param old The vector the diff was computed from, or one of the same
-#'   length.
-#' @param d A `zudiff` object, from [diff_vec()].
+#'   length. For a [diff_text()] result, the string.
+#' @param d A `zudiff` object, from [diff_vec()] or [diff_text()].
 #' @return The vector `d` turns `old` into. For atomic vectors it is
 #'   identical to `new`; for factors, it combines `old`'s and `new`'s levels
-#'   as [c()] does.
+#'   as [c()] does. For a [diff_text()] result, the new string.
 #' @export
 #' @examples
 #' old <- c("a", "b", "c")
@@ -238,6 +238,10 @@ diff_identical <- function(d) {
 #' identical(diff_apply(old, diff_vec(old, new)), new)
 diff_apply <- function(old, d) {
   check_zudiff(d)
+  if (isTRUE(d$text)) {
+    lines <- diff_apply(split_lines(check_string(old, "old")), strip_text(d))
+    return(paste0(lines, collapse = ""))
+  }
   if (length(old) != length(d$old)) {
     zudiff_abort(
       "input",
@@ -263,21 +267,14 @@ diff_apply <- function(old, d) {
   do.call(c, unname(pieces))
 }
 
+# A text diff applied as a plain vector diff of its lines.
+strip_text <- function(d) {
+  d$text <- NULL
+  d
+}
+
 check_zudiff <- function(d) {
   if (!inherits(d, "zudiff")) {
     zudiff_abort("input", "`d` must be a zudiff object, from diff_vec().")
   }
-}
-
-#' @export
-print.zudiff <- function(x, ...) {
-  n <- sum(x$op != 0L)
-  cat(sprintf(
-    "<zudiff: %d changed run%s, edit distance %d%s>\n",
-    n,
-    if (n == 1L) "" else "s",
-    x$distance,
-    if (x$minimal) "" else ", not minimal"
-  ))
-  invisible(x)
 }

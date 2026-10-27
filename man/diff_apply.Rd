@@ -8,14 +8,14 @@ diff_apply(old, d)
 }
 \arguments{
 \item{old}{The vector the diff was computed from, or one of the same
-length.}
+length. For a \code{\link[=diff_text]{diff_text()}} result, the string.}
 
-\item{d}{A \code{zudiff} object, from \code{\link[=diff_vec]{diff_vec()}}.}
+\item{d}{A \code{zudiff} object, from \code{\link[=diff_vec]{diff_vec()}} or \code{\link[=diff_text]{diff_text()}}.}
 }
 \value{
 The vector \code{d} turns \code{old} into. For atomic vectors it is
 identical to \code{new}; for factors, it combines \code{old}'s and \code{new}'s levels
-as \code{\link[=c]{c()}} does.
+as \code{\link[=c]{c()}} does. For a \code{\link[=diff_text]{diff_text()}} result, the new string.
 }
 \description{
 Applies the edit script of \code{d} to \code{old}: kept runs come from \code{old} and
