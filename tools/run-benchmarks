@@ -1,0 +1,56 @@
+#!/usr/bin/env Rscript
+# Times the operations of design §10 and prints a Markdown table for
+# .agents/benchmarks.md. Run from the package root, against an installed
+# zudiff:
+#
+#   tools/run-benchmarks            # every row zudiff can run today
+#
+# Rows whose zudiff function does not exist yet are timed for the
+# comparison only (diffobj, match()), which is the Stage 1 baseline.
+# zugojson's empty call is timed when zugojson is installed.
+
+suppressPackageStartupMessages({
+  library(zudiff)
+  library(bench)
+})
+
+has <- function(fn) exists(fn, envir = asNamespace("zudiff"), inherits = FALSE)
+row <- function(operation, what, b) {
+  data.frame(
+    operation = operation, what = what,
+    median = format(b$median), mem = format(b$mem_alloc)
+  )
+}
+mark <- function(...) bench::mark(..., check = FALSE, min_iterations = 5, filter_gc = FALSE)
+
+set.seed(20261027)
+rows <- list()
+
+# 10^5-line texts, 1 % of lines changed.
+n <- 1e5
+old <- sprintf("line %d: %s", seq_len(n), vapply(seq_len(n), function(i) {
+  paste(sample(letters, 8, TRUE), collapse = "")
+}, ""))
+new <- old
+at <- sample(n, n / 100)
+new[at] <- paste(new[at], "changed")
+rows[["ses"]] <- row("10^5 lines, 1 % changed", "diffobj::ses()", mark(diffobj::ses(old, new)))
+x <- c(old, new)
+rows[["match_text"]] <- row("10^5 lines, 1 % changed", "match(x, x)", mark(match(x, x)))
+
+# Two identical 10^6-element vectors.
+v <- sample.int(1e5, 1e6, TRUE)
+x <- c(v, v)
+rows[["match_id"]] <- row("identical 10^6 integers", "match(x, x)", mark(match(x, x)))
+vc <- as.character(v[seq_len(1e5)])
+rows[["ses_id"]] <- row("identical 10^5 strings", "diffobj::ses()", mark(diffobj::ses(vc, vc)))
+
+# Empty call: one round trip through goose_r_run() and back.
+rows[["empty"]] <- row("empty call", "zudiff probe_index(1)", mark(zudiff:::probe_index(1)))
+if (requireNamespace("zugojson", quietly = TRUE)) {
+  rows[["empty_zj"]] <- row("empty call", "zugojson index_probe(1)", mark(zugojson:::index_probe(1)))
+}
+
+out <- do.call(rbind, rows)
+cat("| Operation | What | Median | Memory |\n| --- | --- | --- | --- |\n")
+cat(sprintf("| %s | %s | %s | %s |\n", out$operation, out$what, out$median, out$mem), sep = "")
