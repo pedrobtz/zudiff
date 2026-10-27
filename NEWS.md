@@ -20,5 +20,6 @@
 * `diff_edits()` lists its runs as 1-based starts and lengths,
   `diff_identical()` says whether the inputs were equal, and
   `diff_apply()` applies it.
+* Windows is supported.
 * `zudiff_info()` reports the package version, and the Goose compiler
   commit and runtime interface hash the bundled C was generated with.

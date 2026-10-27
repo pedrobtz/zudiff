@@ -30,7 +30,7 @@ then.
 | 4 | [Patience diff](#stage-4--patience-diff) | quick | [#6](https://github.com/pedrobtz/zudiff/issues/6) | [#18](https://github.com/pedrobtz/zudiff/pull/18) | 2026-10-27 |
 | 5 | [Text, hunks and unified output](#stage-5--text-hunks-and-unified-output) | quick | [#7](https://github.com/pedrobtz/zudiff/issues/7) | [#19](https://github.com/pedrobtz/zudiff/pull/19) | 2026-10-27 |
 | 6 | [Patches and benchmarks](#stage-6--patches-and-benchmarks) | quick | [#8](https://github.com/pedrobtz/zudiff/issues/8) | [#20](https://github.com/pedrobtz/zudiff/pull/20) | 2026-10-27 |
-| 7 | [Windows runtime](#stage-7--windows-runtime) | full | [#9](https://github.com/pedrobtz/zudiff/issues/9) | | |
+| 7 | [Windows runtime](#stage-7--windows-runtime) | full | [#9](https://github.com/pedrobtz/zudiff/issues/9) | | 2026-10-27 |
 | 8 | [Full CI](#stage-8--full-ci) | full | [#10](https://github.com/pedrobtz/zudiff/issues/10) | | |
 | 9 | [v0.1.0 readiness](#stage-9--v010-readiness) | full | [#11](https://github.com/pedrobtz/zudiff/issues/11) | | |
 
@@ -361,6 +361,16 @@ vectored exception handler and a console control handler`.
 
 - A full-profile run is green on the pull request, Windows legs included.
 - The runtime and interrupt tests pass on Windows.
+
+  Recorded on 2026-10-27: Q5 settled, `zudiff` writes the Windows half
+  (`zugoose` had begun no stage). Before CI, a harness of the runtime and
+  the core, cross-compiled with MinGW-w64 and run under Wine, passed 15
+  checks: start-up, a diff, bounds failures with rewind, growth through
+  128 MB of on-demand commits, a reported Ctrl-C, and writes into the
+  guard gap that come back as failures. `tools/check-symbols.sh` reads the
+  package's objects on Windows, because every MinGW DLL imports `abort`
+  and `fwrite` for its start-up code. The test of a Ctrl-C during a short
+  diff stays POSIX-only: it needs R's own SIGINT handler.
 
 **Design.** D10, Q5, §12 (Windows).
 
