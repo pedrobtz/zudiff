@@ -27,10 +27,17 @@ decisions marked (C) and its open questions (§15) are still open.
 
 ## Current state
 
-Scaffolded 2026-10-26 with `create-pkg.sh` (C stub in `src/`); no
-functionality yet. The roadmap in `.agents/roadmap.md` takes it to
-v0.1.0. It is built by hand on `zugojson`’s pattern, independently of
-`zugoose` (design D1, revised 2026-10-26).
+Scaffolded 2026-10-26 with `create-pkg.sh`. As of 2026-10-27,
+[`diff_vec()`](https://pedrobtz.github.io/zudiff/reference/diff_vec.md),
+[`diff_edits()`](https://pedrobtz.github.io/zudiff/reference/diff_edits.md),
+[`diff_identical()`](https://pedrobtz.github.io/zudiff/reference/diff_edits.md)
+and
+[`diff_apply()`](https://pedrobtz.github.io/zudiff/reference/diff_apply.md)
+work, with greedy Myers (O(D²) memory) in Goose; the cost limit,
+interrupts, patience, text and patches are not built yet. The roadmap in
+`.agents/roadmap.md` takes it to v0.1.0. It is built by hand on
+`zugojson`’s pattern, independently of `zugoose` (design D1, revised
+2026-10-26).
 
 ## Stage tracking
 
@@ -69,9 +76,10 @@ CRAN accepts it, never before: a `.9000` version above an unreleased
 Until the first release the R API may change freely. Sibling packages
 can still depend on this one before CRAN does, through `Remotes:` or
 `LinkingTo:`. The design names `daffiz` and `zurds` (calling
-`diff_vec()`), `zupdf`, and `zutoml` and `zuyaml` (`Suggests`, for test
-output). There is no C API, so only R API changes reach them. A package
-that others wait on should reach CRAN first.
+[`diff_vec()`](https://pedrobtz.github.io/zudiff/reference/diff_vec.md)),
+`zupdf`, and `zutoml` and `zuyaml` (`Suggests`, for test output). There
+is no C API, so only R API changes reach them. A package that others
+wait on should reach CRAN first.
 
 ## Commands
 

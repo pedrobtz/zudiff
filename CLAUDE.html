@@ -43,7 +43,7 @@
 </div>
 <div class="section level2">
 <h2 id="current-state">Current state<a class="anchor" aria-label="anchor" href="#current-state"></a></h2>
-<p>Scaffolded 2026-10-26 with <code>create-pkg.sh</code> (C stub in <code>src/</code>); no functionality yet. The roadmap in <code>.agents/roadmap.md</code> takes it to v0.1.0. It is built by hand on <code>zugojson</code>’s pattern, independently of <code>zugoose</code> (design D1, revised 2026-10-26).</p>
+<p>Scaffolded 2026-10-26 with <code>create-pkg.sh</code>. As of 2026-10-27, <code><a href="reference/diff_vec.html">diff_vec()</a></code>, <code><a href="reference/diff_edits.html">diff_edits()</a></code>, <code><a href="reference/diff_edits.html">diff_identical()</a></code> and <code><a href="reference/diff_apply.html">diff_apply()</a></code> work, with greedy Myers (O(D²) memory) in Goose; the cost limit, interrupts, patience, text and patches are not built yet. The roadmap in <code>.agents/roadmap.md</code> takes it to v0.1.0. It is built by hand on <code>zugojson</code>’s pattern, independently of <code>zugoose</code> (design D1, revised 2026-10-26).</p>
 </div>
 <div class="section level2">
 <h2 id="stage-tracking">Stage tracking<a class="anchor" aria-label="anchor" href="#stage-tracking"></a></h2>
@@ -65,7 +65,7 @@
 <div class="section level2">
 <h2 id="versioning">Versioning<a class="anchor" aria-label="anchor" href="#versioning"></a></h2>
 <p>A new package develops at <code>0.0.0.9000</code> and targets <code>0.1.0</code> for its first CRAN release. Set <code>Version: 0.1.0</code> and the matching <code>NEWS.md</code> heading when the package enters <code>Pre-flight</code>. Bump to <code>0.1.0.9000</code> only after CRAN accepts it, never before: a <code>.9000</code> version above an unreleased <code>0.1.0</code> heading is wrong.</p>
-<p>Until the first release the R API may change freely. Sibling packages can still depend on this one before CRAN does, through <code>Remotes:</code> or <code>LinkingTo:</code>. The design names <code>daffiz</code> and <code>zurds</code> (calling <code>diff_vec()</code>), <code>zupdf</code>, and <code>zutoml</code> and <code>zuyaml</code> (<code>Suggests</code>, for test output). There is no C API, so only R API changes reach them. A package that others wait on should reach CRAN first.</p>
+<p>Until the first release the R API may change freely. Sibling packages can still depend on this one before CRAN does, through <code>Remotes:</code> or <code>LinkingTo:</code>. The design names <code>daffiz</code> and <code>zurds</code> (calling <code><a href="reference/diff_vec.html">diff_vec()</a></code>), <code>zupdf</code>, and <code>zutoml</code> and <code>zuyaml</code> (<code>Suggests</code>, for test output). There is no C API, so only R API changes reach them. A package that others wait on should reach CRAN first.</p>
 </div>
 <div class="section level2">
 <h2 id="commands">Commands<a class="anchor" aria-label="anchor" href="#commands"></a></h2>
