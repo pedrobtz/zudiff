@@ -23,7 +23,7 @@ then.
 
 | Stage | Title | CI | Issue | Pull request | Done |
 | --- | --- | --- | --- | --- | --- |
-| 0 | [Package identity](#stage-0--package-identity) | quick | [#2](https://github.com/pedrobtz/zudiff/issues/2) | | |
+| 0 | [Package identity](#stage-0--package-identity) | quick | [#2](https://github.com/pedrobtz/zudiff/issues/2) | [#14](https://github.com/pedrobtz/zudiff/pull/14) | 2026-10-27 |
 | 1 | [Goose toolchain and runtime](#stage-1--goose-toolchain-and-runtime) | full | [#3](https://github.com/pedrobtz/zudiff/issues/3) | | |
 | 2 | [Greedy Myers and diff_vec()](#stage-2--greedy-myers-and-diff_vec) | quick | [#4](https://github.com/pedrobtz/zudiff/issues/4) | | |
 | 3 | [Linear space, cost limit and interrupts](#stage-3--linear-space-cost-limit-and-interrupts) | quick | [#5](https://github.com/pedrobtz/zudiff/issues/5) | | |
@@ -51,8 +51,10 @@ on the platforms the POSIX-only stages need.
   `OS_type: unix` and `SystemRequirements` as in `zugojson`, until Stage 7.
 - `R-CMD-check.yaml`: `runners` without Windows, as in `zugojson`, with a
   comment pointing at Stage 7.
-- Callers for the r-actions checks a compiled package needs in the full
-  profile: `gctorture.yml`, `valgrind.yml`, `sanitizers.yml`, `rchk.yml`.
+- ~~Callers for the r-actions checks a compiled package needs in the full
+  profile~~. Moved to Stage 1 on 2026-10-27: on the scaffold's C stub,
+  UBSan's check that the build was instrumented fails, because the stub has
+  nothing UBSan instruments. The checks arrive with the first real C.
 - Pin `coverage.yml` to a commit with the tag in a comment, since it holds
   a write token.
 - `zudiff_info()`, returning the package version; it gains the Goose pin
@@ -65,6 +67,12 @@ on the platforms the POSIX-only stages need.
 - `R CMD check` passes on the quick r-actions profile.
 - Every check of the pull request's quick run finishes in under five
   minutes. Anything tuned to get there is recorded here.
+
+  Nothing was tuned. On 2026-10-27 the package's own steps took seconds,
+  but `r-lib/actions/setup-r` varied from about one to seven minutes
+  between runs of the same job: coverage took 1m06s, then 5m54s, of which
+  setup-r was 314 s. `quick-step` and `quick-containers` cannot shorten
+  that, so it is recorded rather than tuned.
 - `DESCRIPTION` carries no scaffold placeholder text.
 
 **Design.** §3, §5 (`zudiff_info()`).
@@ -98,6 +106,9 @@ and the §10 baseline is recorded before any diff code exists.
 - `inst/COPYRIGHTS` and `inst/licenses/goose-LICENSE` (Apache-2.0), and
   the vendored code declared in `DESCRIPTION`.
 - `.covrignore` excluding the generated and vendored C.
+- `native-checks.yaml` from r-actions' example (sanitizers, valgrind, LTO,
+  gctorture, rchk, analyzers, cran-special), moved here from Stage 0, with
+  the generated and vendored C excluded where the workflows allow it.
 - `tests/testthat/test-abi.R`: the shared object exports `R_init_zudiff`
   only (design §9).
 - `tools/run-benchmarks` and `.agents/benchmarks.md` with the baseline:

@@ -1,14 +1,31 @@
 Package: zudiff
-Title: What the Package Does (One Line, Title Case)
+Title: Shortest Edit Scripts, Unified Diffs and Patches
 Version: 0.0.0.9000
 Authors@R: 
-    person("First", "Last", , "first.last@example.com", role = c("aut", "cre"))
-Description: What the package does (one paragraph).
+    person("Pedro", "Baltazar", , "pedrobtz@gmail.com",
+           role = c("aut", "cre", "cph"))
+Description: Computes the shortest edit script between two sequences
+    (atomic vectors, raw vectors or the lines of two strings) and returns
+    it as data, with Myers' algorithm (E. W. Myers (1986)
+    <doi:10.1007/BF01840446>) or patience diff. Builds hunks with context,
+    writes and parses unified diffs, and applies an edit script or a
+    unified diff. Equality is that of match(), so missing values, signed
+    zeros, encodings and factor labels compare as R users expect. The
+    algorithms are written in the 'Goose' programming language
+    (<https://github.com/aardappel/goose>) and compiled ahead of time to
+    C, which the package bundles.
 License: MIT + file LICENSE
-Encoding: UTF-8
-Roxygen: list(markdown = TRUE)
-RoxygenNote: 8.1.0
-Suggests: 
+URL: https://github.com/pedrobtz/zudiff, https://pedrobtz.github.io/zudiff/
+BugReports: https://github.com/pedrobtz/zudiff/issues
+Depends:
+    R (>= 4.1)
+Suggests:
     testthat (>= 3.0.0)
+SystemRequirements: A C99 compiler. POSIX memory mapping and signals
+    (mmap, mprotect, sigaction); Windows is not supported yet.
+OS_type: unix
 Config/testthat/edition: 3
-URL: https://pedrobtz.github.io/zudiff/
+Encoding: UTF-8
+Language: en-GB
+Roxygen: list(markdown = TRUE)
+Config/roxygen2/version: 8.1.0
