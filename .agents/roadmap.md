@@ -28,7 +28,7 @@ then.
 | 2 | [Greedy Myers and diff_vec()](#stage-2--greedy-myers-and-diff_vec) | quick | [#4](https://github.com/pedrobtz/zudiff/issues/4) | [#16](https://github.com/pedrobtz/zudiff/pull/16) | 2026-10-27 |
 | 3 | [Linear space, cost limit and interrupts](#stage-3--linear-space-cost-limit-and-interrupts) | quick | [#5](https://github.com/pedrobtz/zudiff/issues/5) | [#17](https://github.com/pedrobtz/zudiff/pull/17) | 2026-10-27 |
 | 4 | [Patience diff](#stage-4--patience-diff) | quick | [#6](https://github.com/pedrobtz/zudiff/issues/6) | [#18](https://github.com/pedrobtz/zudiff/pull/18) | 2026-10-27 |
-| 5 | [Text, hunks and unified output](#stage-5--text-hunks-and-unified-output) | quick | [#7](https://github.com/pedrobtz/zudiff/issues/7) | | 2026-10-27 |
+| 5 | [Text, hunks and unified output](#stage-5--text-hunks-and-unified-output) | quick | [#7](https://github.com/pedrobtz/zudiff/issues/7) | [#19](https://github.com/pedrobtz/zudiff/pull/19) | 2026-10-27 |
 | 6 | [Patches and benchmarks](#stage-6--patches-and-benchmarks) | quick | [#8](https://github.com/pedrobtz/zudiff/issues/8) | | |
 | 7 | [Windows runtime](#stage-7--windows-runtime) | full | [#9](https://github.com/pedrobtz/zudiff/issues/9) | | |
 | 8 | [Full CI](#stage-8--full-ci) | full | [#10](https://github.com/pedrobtz/zudiff/issues/10) | | |
