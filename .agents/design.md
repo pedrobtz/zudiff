@@ -531,7 +531,14 @@ Marked **(M)** when the maintainer decided it in the conversation and
   `VirtualAlloc` with `PAGE_NOACCESS` for the stack gap, a vectored
   exception handler for the fault, and a console control handler for
   Ctrl-C, as RFC 0044 §6.2 describes. If `zugoose`'s Windows stage lands
-  first, Stage 6 copies that instead (Q5).
+  first, Stage 6 copies that instead (Q5). Done in roadmap Stage 7, after
+  Goose's own runtime_impl.h: the stacks are reserved and never mapped
+  `PAGE_NOACCESS`; the handler commits the usable part a chunk at a time
+  and treats a fault past it as overflow. It cannot end the process, so it
+  points the faulting thread at a function that jumps back to
+  `goose_r_run()` (`__builtin_longjmp`, which unwinds no SEH frames). It is
+  installed once and removed by `R_unload_zudiff()`. R never sees a Ctrl-C
+  the console handler takes, so the R side raises the `interrupt`.
 
 ## 14. Later versions, in the order they are expected
 
@@ -583,7 +590,8 @@ listed until the stage named confirms it.
   `zudiff`, since `zugoose` has not started and is unlikely to get there
   first. Keep it in its own section of the runtime, close to RFC 0044
   §6.2, and offer it to `zugoose` and `zugojson`, so the work is done once
-  rather than three times. Confirm when `zudiff` reaches Stage 6.
+  rather than three times. Settled 2026-10-27, at roadmap Stage 7:
+  `zugoose` had not begun any stage, so `zudiff` wrote it (D10).
 
 ## 16. What this RFC does not decide
 

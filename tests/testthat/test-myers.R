@@ -105,7 +105,7 @@ test_that("max_cost is checked", {
 })
 
 test_that("Ctrl-C stops a long diff, and the next call works", {
-  skip_on_os("windows")
+  # On Windows the test hook acts as the console control handler would.
   # Every element occurs on both sides, so none is discarded before the
   # search, and the search is long (two vectors with nothing in common are
   # now trivial: discarding leaves nothing to search).
@@ -139,6 +139,9 @@ test_that("long equal runs, which the snakes follow in chunks, are diffed exactl
 })
 
 test_that("Ctrl-C during a short diff, which does not catch it, still reaches R", {
+  # POSIX only: the hook raises a real SIGINT for R's own handler. On
+  # Windows the hook stands in for the console control handler, which a
+  # short diff does not install, and nothing can play R's part.
   skip_on_os("windows")
   # 2 x 2000 elements: under the 4096 that catches Ctrl-C, long enough to
   # poll. R's own handler takes the signal and R acts on it at its next

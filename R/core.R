@@ -4,9 +4,20 @@
 
 core_value <- function(res) {
   if (is.character(res)) {
+    if (isTRUE(attr(res, "zudiff_interrupt"))) {
+      interrupt_r()
+    }
     zudiff_abort("runtime", res)
   }
   res
+}
+
+# A Ctrl-C that reached the Goose code but not R (on Windows, where the
+# console control handler takes it): raised as R raises one, an interrupt
+# condition, then back to the top level.
+interrupt_r <- function() {
+  signalCondition(structure(class = c("interrupt", "condition"), list()))
+  invokeRestart("abort")
 }
 
 zudiff_abort <- function(kind, message, call = NULL) {

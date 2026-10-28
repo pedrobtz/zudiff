@@ -27,9 +27,8 @@ Depends:
 Suggests:
     testthat (>= 3.0.0),
     withr
-SystemRequirements: A C99 compiler. POSIX memory mapping and signals
-    (mmap, mprotect, sigaction); Windows is not supported yet.
-OS_type: unix
+SystemRequirements: A C compiler with GNU extensions (GCC or Clang), as
+    R's own toolchains on Linux, macOS and Windows provide.
 Config/testthat/edition: 3
 Encoding: UTF-8
 Language: en-GB

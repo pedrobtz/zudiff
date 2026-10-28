@@ -1,6 +1,10 @@
 # GNU patch and git apply as oracles for diff_unified() (design §9). Each
 # applies a unified diff to old, written to a file byte for byte, and
 # returns the result as one string, or NULL when the tool is missing.
+#
+# Both must leave line endings alone, which on Windows takes asking: GNU
+# patch opens files in text mode there without --binary, and the runners
+# set git's core.autocrlf, which turns LF into CRLF.
 
 gnu_patch_available <- function() {
   if (!nzchar(Sys.which("patch"))) {
@@ -31,7 +35,7 @@ apply_with_gnu_patch <- function(old, patch) {
   write_bytes(patch, p)
   status <- system2(
     "patch",
-    c("-s", "-N", "-i", shQuote(p), shQuote(f)),
+    c("-s", "-N", "--binary", "-i", shQuote(p), shQuote(f)),
     stdout = FALSE,
     stderr = FALSE
   )
@@ -49,7 +53,7 @@ apply_with_git <- function(old, patch) {
     dir,
     system2(
       "git",
-      c("apply", "--unidiff-zero", "f.patch"),
+      c("-c", "core.autocrlf=false", "apply", "--unidiff-zero", "f.patch"),
       stdout = FALSE,
       stderr = FALSE
     )

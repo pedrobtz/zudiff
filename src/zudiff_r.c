@@ -30,6 +30,20 @@
 
 static SEXP failure(const char *err) { return Rf_mkString(err); }
 
+/* A Ctrl-C the Goose code reported. On POSIX the signal has gone on to R's
+   handler, and R_CheckUserInterrupt() acts on it. On Windows R never saw
+   it: the failure carries an attribute, and core_value() raises the
+   interrupt in R (R/core.R). */
+static SEXP interrupted(const char *err) {
+#ifndef _WIN32
+  R_CheckUserInterrupt();
+#endif
+  SEXP out = PROTECT(failure(err));
+  Rf_setAttrib(out, Rf_install("zudiff_interrupt"), Rf_ScalarLogical(1));
+  UNPROTECT(1);
+  return out;
+}
+
 /* --- diffs ---------------------------------------------------------------- */
 
 typedef struct {
@@ -81,7 +95,7 @@ SEXP zudiff_c_diff(SEXP a, SEXP b, SEXP algorithm, SEXP max_cost) {
   int failed = size >= 4096
                    ? goose_r_run_interruptible(diff_body, &c, err, sizeof err)
                    : goose_r_run(diff_body, &c, err, sizeof err);
-  if (failed == 2) R_CheckUserInterrupt();
+  if (failed == 2) return interrupted(err);
   if (failed) return failure(err);
   SEXP out = Rf_allocVector(RAWSXP, (R_xlen_t) c.n);
   if (c.n > 0) memcpy(RAW(out), c.out, (size_t) c.n);
@@ -182,6 +196,11 @@ static const R_CallMethodDef call_methods[] = {
     {"zudiff_c_test_raise_after", (DL_FUNC) &zudiff_c_test_raise_after, 1},
     {"zudiff_c_goose_info", (DL_FUNC) &zudiff_c_goose_info, 0},
     {NULL, NULL, 0}};
+
+void attribute_visible R_unload_zudiff(DllInfo *dll) {
+  (void) dll;
+  goose_r_unload();
+}
 
 void attribute_visible R_init_zudiff(DllInfo *dll) {
   char err[ERRLEN];

@@ -30,8 +30,8 @@ v0.1.0 API in design §5 works on Linux and macOS: `diff_vec()` and
 patience, Ctrl-C; greedy Myers stays as the tests' reference, algorithm 9),
 `diff_edits()`, `diff_identical()`, `diff_apply()`, `diff_hunks()`,
 `diff_unified()`, printing, `patch_parse()` and `patch_apply()`. Every
-design §10 target is met (`.agents/benchmarks.md`). Not built: the Windows
-runtime (Stage 7). The roadmap in `.agents/roadmap.md` takes it to v0.1.0.
+design §10 target is met (`.agents/benchmarks.md`), on Linux, macOS and
+Windows. The roadmap in `.agents/roadmap.md` takes it to v0.1.0.
 It is built by hand on `zugojson`'s pattern, independently of `zugoose`
 (design D1, revised 2026-10-26).
 
@@ -99,6 +99,7 @@ tools/regenerate.sh --verify <goose-checkout>   # what CI runs
 tools/check-symbols.sh <path>/zudiff.so         # forbidden-symbol check
 tools/run-benchmarks                            # design §10, installed pkg
 tools/run-sweep [pairs]                         # §12 round trip, 10^5 pairs
+tools/wine/run                                  # Windows runtime, under Wine
 ```
 
 ## Architecture
@@ -123,9 +124,11 @@ string as a `zudiff_runtime_error`. No entry point returns a string on
 success, so keep it that way or change the convention. Short calls use
 `goose_r_run()`; only diffs of 4096 elements or more use
 `goose_r_run_interruptible()`, which also catches Ctrl-C at two more
-`sigaction()` calls. Vectors reach Goose borrowed (`sl_i32` points into
-`INTEGER(x)`), never copied. `src/Makevars` compiles with `$(C_VISIBILITY)`
-and only `R_init_zudiff` is marked visible, which `test-abi.R` checks.
+`sigaction()` calls (a console control handler on Windows, where R never
+sees the Ctrl-C and `core_value()` raises the `interrupt`). Vectors reach
+Goose borrowed (`sl_i32` points into `INTEGER(x)`), never copied.
+`src/Makevars` compiles with `$(C_VISIBILITY)`, and only `R_init_zudiff` and
+`R_unload_zudiff` are marked visible, which `test-abi.R` checks.
 
 ## Invariants that are easy to break
 
@@ -145,9 +148,17 @@ and only `R_init_zudiff` is marked visible, which `test-abi.R` checks.
   Results are copied into R objects after the run returns.
 - **Every export clears its globals first.** After a failure the data
   stack tops are rewound but Goose globals are not.
-- **Only `R_init_zudiff` is exported.** The runtime's `gs_*` names are
-  Goose's and cannot take a package prefix, so they must stay hidden or
-  they clash with another package's copy.
+- **Only `R_init_zudiff` and `R_unload_zudiff` are exported.** The
+  runtime's `gs_*` names are Goose's and cannot take a package prefix, so
+  they must stay hidden or they clash with another package's copy.
+- **On Windows the fault handler must not outlive the DLL.**
+  `R_unload_zudiff()` removes it; a vectored handler left in unloaded
+  code crashes R at its next access violation. The handler passes on
+  every fault outside the data stacks.
+- **The Windows runtime is tested outside R too.** Wine runs a harness
+  of the runtime and the core, built with `-DGOOSE_R_TEST`, which reaches
+  the guard gap without filling 2 GB: `tools/wine/run`. Run it after any
+  change to the Windows half.
 - **The copied runtime has a history.** Every change to `zugojson`'s copy
   (interrupts, Windows) is listed in `src/goose_r_runtime.c`'s header
   comment, so a later move to `zugoose` knows what to carry over.

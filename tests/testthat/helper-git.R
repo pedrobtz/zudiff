@@ -11,7 +11,17 @@ git_blocks <- function(old, new, how = "--patience") {
   writeLines(new, fb)
   out <- suppressWarnings(system2(
     "git",
-    c("diff", "--no-index", "--no-color", how, "-U0", fa, fb),
+    c(
+      "-c",
+      "core.autocrlf=false",
+      "diff",
+      "--no-index",
+      "--no-color",
+      how,
+      "-U0",
+      fa,
+      fb
+    ),
     stdout = TRUE
   ))
   heads <- regmatches(out, regexpr("^@@ [-+0-9,]+ [-+0-9,]+ @@", out))
@@ -91,19 +101,33 @@ c_fixture <- function() {
   )
 }
 
-# git's own unified diff of two texts, written to files byte for byte.
+# git's own unified diff of two texts, written to files byte for byte and
+# read back the same way: system2(stdout = TRUE) reads in text mode, which
+# on Windows drops the \r of CRLF lines.
 git_unified <- function(old, new, how = character()) {
   fa <- withr::local_tempfile()
   fb <- withr::local_tempfile()
+  out <- withr::local_tempfile()
   writeBin(charToRaw(enc2utf8(old)), fa)
   writeBin(charToRaw(enc2utf8(new)), fb)
-  out <- suppressWarnings(system2(
+  suppressWarnings(system2(
     "git",
-    c("diff", "--no-index", "--no-color", how, fa, fb),
-    stdout = TRUE
+    c(
+      "-c",
+      "core.autocrlf=false",
+      "diff",
+      "--no-index",
+      "--no-color",
+      how,
+      paste0("--output=", out),
+      fa,
+      fb
+    ),
+    stdout = FALSE,
+    stderr = FALSE
   ))
-  if (length(out) == 0L) {
+  if (!file.exists(out) || file.size(out) == 0) {
     return("")
   }
-  paste0(paste0(out, collapse = "\n"), "\n")
+  rawToChar(readBin(out, "raw", file.size(out)))
 }
