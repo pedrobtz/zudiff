@@ -43,7 +43,7 @@
 </div>
 <div class="section level2">
 <h2 id="current-state">Current state<a class="anchor" aria-label="anchor" href="#current-state"></a></h2>
-<p>Scaffolded 2026-10-26 with <code>create-pkg.sh</code>. As of 2026-10-27 the whole v0.1.0 API in design §5 works on Linux and macOS: <code><a href="reference/diff_vec.html">diff_vec()</a></code> and <code><a href="reference/diff_text.html">diff_text()</a></code> (linear-space Myers with GNU diff’s cost limit and discarding, patience, Ctrl-C; greedy Myers stays as the tests’ reference, algorithm 9), <code><a href="reference/diff_edits.html">diff_edits()</a></code>, <code><a href="reference/diff_edits.html">diff_identical()</a></code>, <code><a href="reference/diff_apply.html">diff_apply()</a></code>, <code><a href="reference/diff_hunks.html">diff_hunks()</a></code>, <code><a href="reference/diff_unified.html">diff_unified()</a></code>, printing, <code><a href="reference/patch_parse.html">patch_parse()</a></code> and <code><a href="reference/patch_apply.html">patch_apply()</a></code>. Every design §10 target is met (<code>.agents/benchmarks.md</code>). Not built: the Windows runtime (Stage 7). The roadmap in <code>.agents/roadmap.md</code> takes it to v0.1.0. It is built by hand on <code>zugojson</code>’s pattern, independently of <code>zugoose</code> (design D1, revised 2026-10-26).</p>
+<p>Scaffolded 2026-10-26 with <code>create-pkg.sh</code>. As of 2026-10-27 the whole v0.1.0 API in design §5 works on Linux and macOS: <code><a href="reference/diff_vec.html">diff_vec()</a></code> and <code><a href="reference/diff_text.html">diff_text()</a></code> (linear-space Myers with GNU diff’s cost limit and discarding, patience, Ctrl-C; greedy Myers stays as the tests’ reference, algorithm 9), <code><a href="reference/diff_edits.html">diff_edits()</a></code>, <code><a href="reference/diff_edits.html">diff_identical()</a></code>, <code><a href="reference/diff_apply.html">diff_apply()</a></code>, <code><a href="reference/diff_hunks.html">diff_hunks()</a></code>, <code><a href="reference/diff_unified.html">diff_unified()</a></code>, printing, <code><a href="reference/patch_parse.html">patch_parse()</a></code> and <code><a href="reference/patch_apply.html">patch_apply()</a></code>. Every design §10 target is met (<code>.agents/benchmarks.md</code>), on Linux, macOS and Windows. The roadmap in <code>.agents/roadmap.md</code> takes it to v0.1.0. It is built by hand on <code>zugojson</code>’s pattern, independently of <code>zugoose</code> (design D1, revised 2026-10-26).</p>
 </div>
 <div class="section level2">
 <h2 id="stage-tracking">Stage tracking<a class="anchor" aria-label="anchor" href="#stage-tracking"></a></h2>
@@ -82,7 +82,8 @@
 <span id="cb2-2"><a href="#cb2-2" tabindex="-1"></a><span class="ex">tools/regenerate.sh</span> <span class="at">--verify</span> <span class="op">&lt;</span>goose-checkout<span class="op">&gt;</span>   <span class="co"># what CI runs</span></span>
 <span id="cb2-3"><a href="#cb2-3" tabindex="-1"></a><span class="ex">tools/check-symbols.sh</span> <span class="op">&lt;</span>path<span class="op">&gt;</span>/zudiff.so         <span class="co"># forbidden-symbol check</span></span>
 <span id="cb2-4"><a href="#cb2-4" tabindex="-1"></a><span class="ex">tools/run-benchmarks</span>                            <span class="co"># design §10, installed pkg</span></span>
-<span id="cb2-5"><a href="#cb2-5" tabindex="-1"></a><span class="ex">tools/run-sweep</span> <span class="pp">[</span><span class="ss">pairs</span><span class="pp">]</span>                         <span class="co"># §12 round trip, 10^5 pairs</span></span></code></pre></div>
+<span id="cb2-5"><a href="#cb2-5" tabindex="-1"></a><span class="ex">tools/run-sweep</span> <span class="pp">[</span><span class="ss">pairs</span><span class="pp">]</span>                         <span class="co"># §12 round trip, 10^5 pairs</span></span>
+<span id="cb2-6"><a href="#cb2-6" tabindex="-1"></a><span class="ex">tools/wine/run</span>                                  <span class="co"># Windows runtime, under Wine</span></span></code></pre></div>
 </div>
 <div class="section level2">
 <h2 id="architecture">Architecture<a class="anchor" aria-label="anchor" href="#architecture"></a></h2>
@@ -94,7 +95,7 @@ src/zudiff_goose.{c,h}    generated from tools/goose/zudiff.goose
 src/goose_vendor.c        copied verbatim from Goose's runtime_impl.h
 src/goose_version.h       generated: runtime interface hash, the pin
 src/goose_r_runtime.{c,h} first-party runtime, copied from zugojson</code></pre>
-<p>Every entry point runs its Goose call inside <code>goose_r_run()</code> and returns its value, or the failure message as a string; <code>core_value()</code> raises a string as a <code>zudiff_runtime_error</code>. No entry point returns a string on success, so keep it that way or change the convention. Short calls use <code>goose_r_run()</code>; only diffs of 4096 elements or more use <code>goose_r_run_interruptible()</code>, which also catches Ctrl-C at two more <code>sigaction()</code> calls. Vectors reach Goose borrowed (<code>sl_i32</code> points into <code>INTEGER(x)</code>), never copied. <code>src/Makevars</code> compiles with <code>$(C_VISIBILITY)</code> and only <code>R_init_zudiff</code> is marked visible, which <code>test-abi.R</code> checks.</p>
+<p>Every entry point runs its Goose call inside <code>goose_r_run()</code> and returns its value, or the failure message as a string; <code>core_value()</code> raises a string as a <code>zudiff_runtime_error</code>. No entry point returns a string on success, so keep it that way or change the convention. Short calls use <code>goose_r_run()</code>; only diffs of 4096 elements or more use <code>goose_r_run_interruptible()</code>, which also catches Ctrl-C at two more <code>sigaction()</code> calls (a console control handler on Windows, where R never sees the Ctrl-C and <code>core_value()</code> raises the <code>interrupt</code>). Vectors reach Goose borrowed (<code>sl_i32</code> points into <code>INTEGER(x)</code>), never copied. <code>src/Makevars</code> compiles with <code>$(C_VISIBILITY)</code>, and only <code>R_init_zudiff</code> and <code>R_unload_zudiff</code> are marked visible, which <code>test-abi.R</code> checks.</p>
 </div>
 <div class="section level2">
 <h2 id="invariants-that-are-easy-to-break">Invariants that are easy to break<a class="anchor" aria-label="anchor" href="#invariants-that-are-easy-to-break"></a></h2>
@@ -109,7 +110,11 @@ src/goose_r_runtime.{c,h} first-party runtime, copied from zugojson</code></pre>
 <li>
 <strong>Every export clears its globals first.</strong> After a failure the data stack tops are rewound but Goose globals are not.</li>
 <li>
-<strong>Only <code>R_init_zudiff</code> is exported.</strong> The runtime’s <code>gs_*</code> names are Goose’s and cannot take a package prefix, so they must stay hidden or they clash with another package’s copy.</li>
+<strong>Only <code>R_init_zudiff</code> and <code>R_unload_zudiff</code> are exported.</strong> The runtime’s <code>gs_*</code> names are Goose’s and cannot take a package prefix, so they must stay hidden or they clash with another package’s copy.</li>
+<li>
+<strong>On Windows the fault handler must not outlive the DLL.</strong> <code>R_unload_zudiff()</code> removes it; a vectored handler left in unloaded code crashes R at its next access violation. The handler passes on every fault outside the data stacks.</li>
+<li>
+<strong>The Windows runtime is tested outside R too.</strong> Wine runs a harness of the runtime and the core, built with <code>-DGOOSE_R_TEST</code>, which reaches the guard gap without filling 2 GB: <code>tools/wine/run</code>. Run it after any change to the Windows half.</li>
 <li>
 <strong>The copied runtime has a history.</strong> Every change to <code>zugojson</code>’s copy (interrupts, Windows) is listed in <code>src/goose_r_runtime.c</code>’s header comment, so a later move to <code>zugoose</code> knows what to carry over. <code>tools/goose/PROVENANCE</code> is written by <code>tools/regenerate.sh</code>; never edit it.</li>
 <li>
