@@ -278,3 +278,31 @@ Timings of the core alone, 2 × 10^5 integer ids:
 **Method.** An A/A test, two identical builds, differed by up to 6%, and a
 fixed order biased the builds timed last. Both evaluation tools now
 rotate the order; differences under about 6% are noise.
+
+## The pin's slowdown, explained (2026-10-31)
+
+The stack is now rebuilt on the hoisting fix: fork branches `base-v2`
+(`0c470701`, `b362b5a5` plus the fix), `small-fixes-v2`, `hosted-v2`
+(`31fac6fd`) and `contexts-v3` (`70569be5`). Goose's full suite passes on
+top. zudiff's `goose-pin-fix` branch pins `base-v2` as a baseline with no
+patch. Evaluation in zudiff, 8 rotating rounds (R's timer has 1 ms
+resolution):
+
+| Build | Myers | patience | 10 MB raw | empty `.Call` |
+| --- | --- | --- | --- | --- |
+| `main` (`e76d5c9`, own runtime) | 22.0 ms | 72.0 ms | 52.0 ms | 4240 ns |
+| `goose-pin-fork` (`b362b5a5`) | +9.1% | +4.2% | 0% | +0.8% |
+| `goose-pin-fix` (+ hoisting fix) | +4.5% | −0.7% | −1.9% | −0.7% |
+| `goose-hosted` (patches 0–1) | +4.5% | +1.4% | +1.9% | +0.1% |
+| `goose-contexts` (patch 2) | +4.5% | 0.0% | 0.0% | −0.2% |
+
+- Upstream's two regressions on zudiff's core, both found by bisecting
+  with a C driver and checked against their parents (#24):
+  - `cec434a5`, +9%: every local hoisted by `HoistAggregateDecls`, whose
+    list of scalar type names missed the new `gs_*` names. Fixed by
+    `fix-hoist-scalars` (`73748d80`).
+  - `ef2a88fc`, about +5%: its `GenLocNow` sub-change (an index variable
+    used directly in a location instead of a copy), which targets TinyCC.
+    Not fixed; turning it off recovers all but 2%.
+- Patches 0–2 add nothing measurable on top of either.
+- The fix also shrinks the generated C: 8010 to 7337 lines at the pin.
