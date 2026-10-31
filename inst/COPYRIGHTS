@@ -20,7 +20,10 @@ Third-party code: Goose
 -----------------------
 
     Upstream:  https://github.com/aardappel/goose
-    Commit:    see tools/goose/PIN and tools/goose/PROVENANCE
+    Built from: the repository in tools/goose/REMOTE, at the commit in
+               tools/goose/PIN (see tools/goose/PROVENANCE); a fork of
+               upstream that adds one change of the zudiff author's to the
+               compiler's header output, under the same licence
     Licence:   Apache-2.0
     Copyright: Wouter van Oortmerssen
 

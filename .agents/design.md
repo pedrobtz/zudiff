@@ -142,8 +142,10 @@ changed lines, histogram diff, patch fuzz, diffs of directories, a C API.
 Two layers, split at a hand-written `.Call` boundary.
 
 1. **The core** (`tools/goose/zudiff.goose`, compiled into
-   `src/zudiff_goose.c` by `tools/regenerate.sh` at the commit in
-   `tools/goose/PIN`). Two exported functions:
+   `src/zudiff_goose.c` by `tools/regenerate.sh` from the repository in
+   `tools/goose/REMOTE` at the commit in `tools/goose/PIN`; since
+   2026-10-31 a fork commit, upstream plus a fix to the `--header`
+   output). Two exported functions:
 
    ```goose
    export fn diff_ids(a: const i32[:], b: const i32[:],
