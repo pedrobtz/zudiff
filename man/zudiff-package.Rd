@@ -27,7 +27,7 @@ Authors:
 
 Other contributors:
 \itemize{
-  \item Wouter van Oortmerssen (author of the 'Goose' language and compiler; the runtime code the generated C inlines and the runtime pieces in src/goose_vendor.c) [contributor, copyright holder]
+  \item Wouter van Oortmerssen (author of the 'Goose' language and compiler; the runtime code the generated C inlines and the runtime in src/goose_runtime.c) [contributor, copyright holder]
 }
 
 }

@@ -99,7 +99,6 @@ tools/regenerate.sh --verify <goose-checkout>   # what CI runs
 tools/check-symbols.sh <path>/zudiff.so         # forbidden-symbol check
 tools/run-benchmarks                            # design §10, installed pkg
 tools/run-sweep [pairs]                         # §12 round trip, 10^5 pairs
-tools/wine/run                                  # Windows runtime, under Wine
 ```
 
 ## Architecture
@@ -113,19 +112,18 @@ R/core.R                  core_value(), zudiff_abort(), the probes
 src/zudiff_r.c            .Call glue: the only C that uses R's API
 ───────────────────────── plain C below ─────────────────────────
 src/zudiff_goose.{c,h}    generated from tools/goose/zudiff.goose
-src/goose_vendor.c        copied verbatim from Goose's runtime_impl.h
+src/goose_runtime.c       generated: Goose's runtime, built -DGS_HOSTED
 src/goose_version.h       generated: runtime interface hash, the pin
-src/goose_r_runtime.{c,h} first-party runtime, copied from zugojson
 ```
 
-Every entry point runs its Goose call inside `goose_r_run()` and returns
-its value, or the failure message as a string; `core_value()` raises a
-string as a `zudiff_runtime_error`. No entry point returns a string on
-success, so keep it that way or change the convention. Short calls use
-`goose_r_run()`; only diffs of 4096 elements or more use
-`goose_r_run_interruptible()`, which also catches Ctrl-C at two more
-`sigaction()` calls (a console control handler on Windows, where R never
-sees the Ctrl-C and `core_value()` raises the `interrupt`). Vectors reach
+Every entry point runs its Goose call inside `goose_host_call()` (Goose's
+hosted runtime, `.agents/goose-fork.md` patch 1) and returns its value, or
+the failure message as a string; `core_value()` raises a string as a
+`zudiff_runtime_error`. No entry point returns a string on success, so keep
+it that way or change the convention. Ctrl-C: the core calls
+`goose_host_poll()` every 1024 steps, whose hook runs
+`R_CheckUserInterrupt()` inside `R_ToplevelExec()`; a yes ends the call,
+and `core_value()` raises the `interrupt`. Vectors reach
 Goose borrowed (`sl_i32` points into `INTEGER(x)`), never copied.
 `src/Makevars` compiles with `$(C_VISIBILITY)`, and only `R_init_zudiff` and
 `R_unload_zudiff` are marked visible, which `test-abi.R` checks.
@@ -136,39 +134,32 @@ Goose borrowed (`sl_i32` points into `INTEGER(x)`), never copied.
   `tools/goose/zudiff.goose` through `tools/regenerate.sh`. Edit the Goose
   source and regenerate; CI fails on a hand edit.
 - **The pin is a fork commit.** `tools/goose/REMOTE` names
-  `pedrobtz/goose`, and `PIN` is upstream `master` plus one commit that
-  declares the alignment types in the `--header` output. Upstream's
-  header names `gs_i64` without declaring it, so upstream alone does not
-  build `zudiff`. Go back to an upstream release once one contains the fix.
-  Change `REMOTE` and `PIN` together. `pedrobtz/zugojson`'s research plan
-  (Task 3a) has the details.
+  `pedrobtz/goose`, and `PIN` is upstream `master` plus the patches in
+  `.agents/goose-fork.md`: the `--header` types, `-pedantic`, and the
+  hosted runtime (`GS_HOSTED`) zudiff now depends on. Change `REMOTE` and
+  `PIN` together.
 - **Generated on any platform.** Since the pin includes
   [aardappel/goose#122](https://github.com/aardappel/goose/issues/122)'s
   fix, the generated C is the same whether the compiler was built with
   libc++ (macOS) or libstdc++ (Linux). CI's `regenerate` job checks both.
 - **The Goose pieces copied in stay Apache-2.0**, while `zudiff`'s own code
   is MIT. Keep the two licences declared in `inst/COPYRIGHTS`.
-- **No R API inside `goose_r_run()`.** Nothing Goose calls may allocate R
-  objects or raise R errors; an R longjmp would skip the stack rewind.
-  Results are copied into R objects after the run returns.
+- **No R error inside `goose_host_call()`.** An R longjmp would skip the
+  stack rewind and leave the fault handler installed. The interrupt poll
+  is the one call into R, inside `R_ToplevelExec()`. Results are copied
+  into R objects after the call returns.
 - **Every export clears its globals first.** After a failure the data
   stack tops are rewound but Goose globals are not.
 - **Only `R_init_zudiff` and `R_unload_zudiff` are exported.** The
   runtime's `gs_*` names are Goose's and cannot take a package prefix, so
   they must stay hidden or they clash with another package's copy.
 - **On Windows the fault handler must not outlive the DLL.**
-  `R_unload_zudiff()` removes it; a vectored handler left in unloaded
-  code crashes R at its next access violation. The handler passes on
-  every fault outside the data stacks.
-- **The Windows runtime is tested outside R too.** Wine runs a harness
-  of the runtime and the core, built with `-DGOOSE_R_TEST`, which reaches
-  the guard gap without filling 2 GB: `tools/wine/run`. Run it after any
-  change to the Windows half.
-- **The copied runtime has a history.** Every change to `zugojson`'s copy
-  (interrupts, Windows) is listed in `src/goose_r_runtime.c`'s header
-  comment, so a later move to `zugoose` knows what to carry over.
-  `tools/goose/PROVENANCE` is written by `tools/regenerate.sh`; never edit
-  it.
+  `R_unload_zudiff()` calls `goose_host_unload()`, which removes it; a
+  vectored handler left in unloaded code crashes R at its next access
+  violation. The handler passes on every fault outside the data stacks.
+- **The runtime is Goose's.** `src/goose_runtime.c` is generated; a change
+  to it is a change to the fork. `tools/goose/PROVENANCE` is written by
+  `tools/regenerate.sh`; never edit it.
 - **Equality is `match()`'s, computed in R.** The core sees only integer ids
   or bytes and compares with `==`. Moving equality into the core would lose
   R's rules for `NA`, `NaN`, signed zero, encodings and factor labels.

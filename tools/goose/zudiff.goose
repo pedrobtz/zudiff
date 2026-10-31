@@ -46,13 +46,13 @@ var out: u8[>..] = [];      // the packed script
 var polls: i64 = 0;         // search steps since the call began
 var minimal: bool = true;   // false once a cost cut-off splits
 
-// The runtime (src/goose_r_runtime.c) ends the call if Ctrl-C was pressed
-// since it began; the R glue then raises the interrupt in R.
-extern fn zudiff_check_interrupt() = "zudiff_check_interrupt";
+// Goose's hosted runtime asks the host whether to stop: the R glue checks
+// for Ctrl-C (src/zudiff_r.c), and a yes ends the call as an interrupt.
+extern fn goose_host_poll() = "goose_host_poll";
 
 fn poll() {
     polls++;
-    if (polls & 1023) == 0 { zudiff_check_interrupt(); }
+    if (polls & 1023) == 0 { goose_host_poll(); }
 }
 
 fn step(op: i32, len: i64) {
@@ -659,7 +659,7 @@ export fn zudiff_probe_sum(a: const i32[:]) -> i64 {
 
 // Test hook: fills a local dynamic array, which lives on a Goose data
 // stack, then optionally fails with a bounds error. A failure skips the
-// array's release, so only goose_r_run()'s rewind returns the stack to
+// array's release, so only goose_host_call()'s rewind returns the stack to
 // where it was.
 export fn zudiff_probe_stack(n: i64, fail: bool) -> i64 {
     var v: i64[>..] = [];
