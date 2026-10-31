@@ -224,12 +224,18 @@ as a finished patch.
 ## Results, 2026-10-31
 
 Patches 0–2 are on the fork's branches `small-fixes` (`fd3f2eeb`),
-`hosted` (`35afce04`) and `contexts` (`0d1c106c`), stacked on `b362b5a5`.
+`hosted` (`c08179db`) and `contexts-v2` (`7ae926a4`), stacked on
+`b362b5a5`. (`contexts`, `0d1c106c`, is the same patch before `hosted`
+gained its stdin fix; the first Windows run showed that a hosted program
+still reached stdin, through `__acrt_iob_func`.)
 Goose's own suite passes at each, with new tests `export_header`,
 `hosted_runtime` and `hosted_contexts`. The hosts' branches are
 `goose-hosted` and `goose-contexts` in both repositories, as draft pull
 requests #27 and #28 here and pedrobtz/py-zugodiff#2 and #3. Measured on
-macOS x86-64 (i5-8500B); Linux and Windows are what the drafts' CI is for.
+macOS x86-64 (i5-8500B). py-zugodiff#2 passed on Linux (Python 3.10 and
+3.13, UBSan); the hosted runtime also cross-compiles for Windows with
+mingw-w64 without warnings and without stream, exit or printf imports.
+The drafts' CI covers the rest.
 
 | | zudiff | zugodiff |
 | --- | --- | --- |
