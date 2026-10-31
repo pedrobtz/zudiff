@@ -8,6 +8,9 @@
    error: it would jump over the rewind and leave Goose's fault handler
    installed. The one call into R during a run is the interrupt poll, which
    runs R_CheckUserInterrupt() inside R_ToplevelExec(), so it cannot jump.
+   That may run R code (event handlers), which may call zudiff again: such
+   a nested call runs in a context of its own (zudiff_call), so that it
+   cannot touch the outer call's globals or data stacks.
 
    Each entry point returns its value on success and, on failure, the
    message as a string, which R raises as a zudiff_runtime_error
@@ -49,12 +52,78 @@ static SEXP run_failed(int failed, const uint8_t *msg, int64_t len) {
   return failed == 2 ? interrupted(msg, len) : failure(msg, len);
 }
 
+/* --- contexts -------------------------------------------------------------- */
+
+/* A call made while none runs uses the main context, goose_init's. A call
+   nested in one, from R code the poll ran, uses the context for its depth,
+   made on first use. A context in which a call failed is dropped, so that
+   no half-built global outlives it. */
+#define ZUDIFF_MAX_DEPTH 8
+static goose_ctx *contexts[ZUDIFF_MAX_DEPTH];
+static int depth;
+
+static const char too_deep[] = "zudiff calls nested more than 8 deep";
+static const char no_context[] = "cannot make a Goose context for a nested call";
+
+static int zudiff_call(void (*body)(void *), void *data, const uint8_t **msg, int64_t *len) {
+  int failed;
+  if (depth == 0) {
+    depth++;
+    failed = goose_host_call(body, data, msg, len);
+    depth--;
+    return failed;
+  }
+  if (depth >= ZUDIFF_MAX_DEPTH) {
+    *msg = (const uint8_t *) too_deep;
+    *len = (int64_t) sizeof too_deep - 1;
+    return 1;
+  }
+  goose_ctx *c = contexts[depth];
+  if (!c) {
+    c = goose_ctx_new();
+    goose_ctx *prev = c ? goose_ctx_swap(c) : NULL;
+    if (c && goose_host_call(goose_ctx_start, NULL, msg, len)) {
+      goose_ctx_swap(prev);
+      goose_ctx_free(c);
+      return 1;
+    }
+    if (!c) {
+      *msg = (const uint8_t *) no_context;
+      *len = (int64_t) sizeof no_context - 1;
+      return 1;
+    }
+    goose_ctx_swap(prev);
+    contexts[depth] = c;
+  }
+  goose_ctx *prev = goose_ctx_swap(c);
+  depth++;
+  failed = goose_host_call(body, data, msg, len);
+  depth--;
+  goose_ctx_swap(prev);
+  if (failed) {
+    goose_ctx_free(c);
+    contexts[depth] = NULL;
+  }
+  return failed;
+}
+
 /* --- interrupts ----------------------------------------------------------- */
 
 /* Test hook: the n-th poll of the next run raises SIGINT, which R's own
    handler catches. On Windows the poll reports the interrupt itself, as a
    Ctrl-C would make R_CheckUserInterrupt() do. */
 static long raise_after;
+
+/* Test hook: an R function the n-th poll of the next run calls, as an
+   event handler R_CheckUserInterrupt() runs would be. */
+static SEXP poll_callback;
+static long callback_after;
+
+static void call_callback(void *fn) {
+  SEXP call = PROTECT(Rf_lang1((SEXP) fn));
+  Rf_eval(call, R_GlobalEnv);
+  UNPROTECT(1);
+}
 
 static void check_interrupt(void *unused) {
   (void) unused;
@@ -63,6 +132,8 @@ static void check_interrupt(void *unused) {
 
 /* Called by the Goose core every 1024 search steps (goose_host_poll). */
 static int poll_interrupt(void) {
+  if (callback_after > 0 && --callback_after == 0 && poll_callback != R_NilValue)
+    R_ToplevelExec(call_callback, poll_callback);
   if (raise_after > 0 && --raise_after == 0) {
 #ifdef _WIN32
     return 1;
@@ -119,7 +190,7 @@ SEXP zudiff_c_diff(SEXP a, SEXP b, SEXP algorithm, SEXP max_cost) {
                : mc < 0 ? -1 : (int64_t) mc;
   const uint8_t *msg;
   int64_t len;
-  int failed = goose_host_call(diff_body, &c, &msg, &len);
+  int failed = zudiff_call(diff_body, &c, &msg, &len);
   raise_after = 0;
   if (failed) return run_failed(failed, msg, len);
   SEXP out = Rf_allocVector(RAWSXP, (R_xlen_t) c.n);
@@ -142,7 +213,7 @@ SEXP zudiff_c_probe_index(SEXP i) {
   probe_index_call c = {(int64_t) Rf_asInteger(i), 0};
   const uint8_t *msg;
   int64_t len;
-  int failed = goose_host_call(probe_index_body, &c, &msg, &len);
+  int failed = zudiff_call(probe_index_body, &c, &msg, &len);
   if (failed) return run_failed(failed, msg, len);
   return Rf_ScalarReal((double) c.v);
 }
@@ -162,7 +233,7 @@ SEXP zudiff_c_probe_sum(SEXP x) {
   probe_sum_call c = {{INTEGER(x), (int64_t) XLENGTH(x)}, 0};
   const uint8_t *msg;
   int64_t len;
-  int failed = goose_host_call(probe_sum_body, &c, &msg, &len);
+  int failed = zudiff_call(probe_sum_body, &c, &msg, &len);
   if (failed) return run_failed(failed, msg, len);
   return Rf_ScalarReal((double) c.v);
 }
@@ -182,7 +253,7 @@ SEXP zudiff_c_probe_stack(SEXP n, SEXP fail) {
                         (uint8_t) Rf_asLogical(fail)};
   const uint8_t *msg;
   int64_t len;
-  int failed = goose_host_call(probe_stack_body, &c, &msg, &len);
+  int failed = zudiff_call(probe_stack_body, &c, &msg, &len);
   if (failed) return run_failed(failed, msg, len);
   return Rf_ScalarReal((double) c.v);
 }
@@ -196,8 +267,17 @@ static void touch_gap_body(void *p) {
 SEXP zudiff_c_test_touch_gap(void) {
   const uint8_t *msg;
   int64_t len;
-  int failed = goose_host_call(touch_gap_body, goose_host_test_gap(), &msg, &len);
+  int failed = zudiff_call(touch_gap_body, goose_host_test_gap(), &msg, &len);
   if (failed) return run_failed(failed, msg, len);
+  return R_NilValue;
+}
+
+SEXP zudiff_c_test_poll_callback(SEXP fn, SEXP after) {
+  if (poll_callback == NULL) poll_callback = R_NilValue;
+  if (poll_callback != R_NilValue) R_ReleaseObject(poll_callback);
+  poll_callback = fn;
+  if (fn != R_NilValue) R_PreserveObject(fn);
+  callback_after = (long) Rf_asInteger(after);
   return R_NilValue;
 }
 
@@ -236,17 +316,20 @@ static const R_CallMethodDef call_methods[] = {
     {"zudiff_c_probe_stack", (DL_FUNC) &zudiff_c_probe_stack, 2},
     {"zudiff_c_stack_used", (DL_FUNC) &zudiff_c_stack_used, 0},
     {"zudiff_c_test_raise_after", (DL_FUNC) &zudiff_c_test_raise_after, 1},
+    {"zudiff_c_test_poll_callback", (DL_FUNC) &zudiff_c_test_poll_callback, 2},
     {"zudiff_c_test_touch_gap", (DL_FUNC) &zudiff_c_test_touch_gap, 0},
     {"zudiff_c_goose_info", (DL_FUNC) &zudiff_c_goose_info, 0},
     {NULL, NULL, 0}};
 
 void attribute_visible R_unload_zudiff(DllInfo *dll) {
   (void) dll;
+  for (int i = 0; i < ZUDIFF_MAX_DEPTH; i++) goose_ctx_free(contexts[i]);
   goose_host_unload();
 }
 
 void attribute_visible R_init_zudiff(DllInfo *dll) {
   goose_host h = {NULL, poll_interrupt};
+  poll_callback = R_NilValue;
   const uint8_t *msg;
   int64_t len;
   goose_host_set(&h);

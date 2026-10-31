@@ -62,6 +62,12 @@ test_raise_after <- function(n) {
   invisible(.Call(zudiff_c_test_raise_after, as.integer(n)))
 }
 
+# Calls fn() at the n-th interrupt poll of the next Goose run, as an event
+# handler would be; fn = NULL clears it.
+test_poll_callback <- function(fn, after) {
+  invisible(.Call(zudiff_c_test_poll_callback, fn, as.integer(after)))
+}
+
 # A write to a data stack's guard gap, as an overflow makes.
 test_touch_gap <- function() {
   invisible(core_value(.Call(zudiff_c_test_touch_gap)))

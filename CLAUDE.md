@@ -123,7 +123,10 @@ the failure message as a string; `core_value()` raises a string as a
 it that way or change the convention. Ctrl-C: the core calls
 `goose_host_poll()` every 1024 steps, whose hook runs
 `R_CheckUserInterrupt()` inside `R_ToplevelExec()`; a yes ends the call,
-and `core_value()` raises the `interrupt`. Vectors reach
+and `core_value()` raises the `interrupt`. R code the poll runs may call
+zudiff again: `zudiff_call()` runs such a nested call in a Goose context
+of its own (`--contexts`, patch 2), so it cannot touch the outer call's
+globals or stacks. Vectors reach
 Goose borrowed (`sl_i32` points into `INTEGER(x)`), never copied.
 `src/Makevars` compiles with `$(C_VISIBILITY)`, and only `R_init_zudiff` and
 `R_unload_zudiff` are marked visible, which `test-abi.R` checks.
@@ -136,8 +139,8 @@ Goose borrowed (`sl_i32` points into `INTEGER(x)`), never copied.
 - **The pin is a fork commit.** `tools/goose/REMOTE` names
   `pedrobtz/goose`, and `PIN` is upstream `master` plus the patches in
   `.agents/goose-fork.md`: the `--header` types, `-pedantic`, and the
-  hosted runtime (`GS_HOSTED`) zudiff now depends on. Change `REMOTE` and
-  `PIN` together.
+  hosted runtime (`GS_HOSTED`) and contexts (`--contexts`) zudiff now
+  depends on. Change `REMOTE` and `PIN` together.
 - **Generated on any platform.** Since the pin includes
   [aardappel/goose#122](https://github.com/aardappel/goose/issues/122)'s
   fix, the generated C is the same whether the compiler was built with
