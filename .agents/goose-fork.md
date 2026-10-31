@@ -248,7 +248,13 @@ Timings of the core alone, 2 × 10^5 integer ids:
 
 - **Patch 0–1:** no measurable change in either host. The one regression,
   Myers about 10% slower in zudiff, comes from the pin bump itself
-  (`e76d5c9` to `b362b5a5`, #24), before any patch.
+  (`e76d5c9` to `b362b5a5`, #24), before any patch. Bisected (#24): it is
+  upstream's alignment fix, `cec434a5`, +9% against its parent, while our
+  own alignment fix on the old base (`f758863`, the closed
+  aardappel/goose#125) cost +0.5%. Upstream also types locals and
+  temporaries with the 1-byte-aligned `gs_i32`/`gs_i64`; ours touched only
+  pointers into packed memory. Which of upstream's sites costs the 9% is
+  still to find.
 - **Patch 2, first version:** globals reached through `gs_gl` made Myers
   8% and patience 6–7% slower. The compiler reloads the pointer after
   stores it cannot prove apart; a `const` accessor recovered Myers in a
@@ -258,9 +264,11 @@ Timings of the core alone, 2 × 10^5 integer ids:
   1's apart from the context functions, and Myers is back within noise.
   Patience still measured about 11% slower in zugodiff, although its
   compiled code is identical to patch 1's (1853 instructions each); the
-  runtime alone accounts for under 4%. The likeliest cause is placement
-  (a second globals struct moves the first relative to the page-aligned
-  stacks); it is to be checked on Linux and in R before acting on it.
+  runtime alone accounts for under 4%. On a GitHub Linux runner (AMD EPYC
+  9V45, bench workflow on py-zugodiff's `bench-linux` branch) every core
+  timing of patches 0–2 is within the A/A control's ±1.1%, patience
+  included: the gap is particular to this Mac's Intel CPU, where identical
+  code measured differently, and not a cost of contexts.
 
 **Method.** An A/A test, two identical builds, differed by up to 6%, and a
 fixed order biased the builds timed last. Both evaluation tools now
