@@ -104,3 +104,31 @@ under 80 ms for six files at 50 % changed; git's is up to 1.6× faster and
 its scripts up to 0.09 % longer. Q1's choice stands. Before unmatched lines
 were set aside, the same corpus took GNU's rule 2,182 ms at 50 % and left
 one script non-minimal.
+
+## Goose pin b362b5a5, 2026-10-31
+
+Same machine. The pin moved from `e76d5c9` to `b362b5a5`, which is
+upstream `2ed1a63d` plus a fix to the `--header` output. Each build was
+installed into its own library, and the runs alternated between them.
+
+The core alone: `.Call(zudiff_c_diff, ...)` on 2 × 10^5 integer ids, with
+1 % changed. The median of six processes, each the median of at least 20
+iterations. `f758863` is `zugojson`'s previous pin: `e76d5c9` with its
+own alignment fix.
+
+| Core | e76d5c9 | f758863 | b362b5a5 |
+| --- | --- | --- | --- |
+| Myers | 22.3 ms | 22.4 ms (+0.5 %, slower in 2 of 6) | 23.7 ms (+6.4 %, slower in 6 of 6) |
+| Patience | 74.2 ms | 73.6 ms (−0.8 %, slower in 3 of 6) | 76.9 ms (+3.7 %, slower in 6 of 6) |
+
+On two 10 MB raw vectors with 100 edits, `diff_vec()` took 53.3 ms on both
+`e76d5c9` and `b362b5a5`.
+
+Alignment-safe access costs nothing (`f758863`). The integer slowdown
+comes from another upstream change between `e76d5c9` and `2ed1a63d`
+(#24). The §10 targets are still met. In
+the quieter of two `tools/run-benchmarks` runs, `b362b5a5` measured:
+- the text row at 27.8 ms, 9.1× `diffobj`;
+- the raw row at 53.5 ms;
+- identical vectors at 0.47 ms beyond `match()`;
+- the empty call 2 % under `zugojson`'s.

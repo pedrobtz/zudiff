@@ -1,6 +1,7 @@
 # Two checks the shared R CMD check does not make:
 #
-# - regenerate: builds the Goose compiler at tools/goose/PIN and verifies
+# - regenerate: builds the Goose compiler from tools/goose/REMOTE at
+#   tools/goose/PIN, on Linux and macOS, and verifies
 #   that the committed generated C is exactly what tools/goose and the pin
 #   produce, so nobody edits src/zudiff_goose.c by hand.
 # - symbols: builds the package on Linux, macOS and Windows and fails on
@@ -16,18 +17,19 @@ permissions: read-all
 
 jobs:
   regenerate:
-    # macOS, because the Goose compiler's output depends on the C++
-    # standard library: it emits some typedefs in the order of an
-    # unordered_map keyed by strings, and libc++ and libstdc++ hash strings
-    # differently. The committed C is generated on macOS (libc++), so the
-    # check must run there too. Deterministic on either library.
-    # Reported upstream: https://github.com/aardappel/goose/issues/122
-    runs-on: macos-latest
+    # Both C++ standard libraries: before aardappel/goose#122 was fixed
+    # (2c7d8d5), a compiler built with libstdc++ (Linux) emitted some
+    # typedefs in a different order than one built with libc++ (macOS).
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - name: Check out Goose at the pin
         run: |
-          git clone https://github.com/aardappel/goose.git "$RUNNER_TEMP/goose"
+          git clone "$(cat tools/goose/REMOTE)" "$RUNNER_TEMP/goose"
           git -C "$RUNNER_TEMP/goose" checkout "$(cat tools/goose/PIN)"
       - name: Build the Goose compiler
         run: |

@@ -90,8 +90,8 @@ air format .                                     # format R sources
 ```
 
 Occasional, when the Goose source or the pin changes. The checkout must be
-at `tools/goose/PIN` and built (`cmake -S . -B build && cmake --build
-build`):
+a clone of `tools/goose/REMOTE` at `tools/goose/PIN`, built (`cmake -S . -B
+build && cmake --build build`):
 
 ```sh
 tools/regenerate.sh <goose-checkout>            # rewrite the generated C
@@ -135,12 +135,17 @@ Goose borrowed (`sl_i32` points into `INTEGER(x)`), never copied.
 - **The shipped C is generated.** `src/zudiff_goose.c` comes from
   `tools/goose/zudiff.goose` through `tools/regenerate.sh`. Edit the Goose
   source and regenerate; CI fails on a hand edit.
-- **Regenerate on macOS.** The compiler's output depends on the C++
-  standard library: with libstdc++ (Linux) some typedefs come out in a
-  different order than with libc++ (macOS). CI's `regenerate` job runs on
-  macOS to match until
-  [aardappel/goose#122](https://github.com/aardappel/goose/issues/122) is
-  fixed.
+- **The pin is a fork commit.** `tools/goose/REMOTE` names
+  `pedrobtz/goose`, and `PIN` is upstream `master` plus one commit that
+  declares the alignment types in the `--header` output. Upstream's
+  header names `gs_i64` without declaring it, so upstream alone does not
+  build `zudiff`. Go back to an upstream release once one contains the fix.
+  Change `REMOTE` and `PIN` together. `pedrobtz/zugojson`'s research plan
+  (Task 3a) has the details.
+- **Generated on any platform.** Since the pin includes
+  [aardappel/goose#122](https://github.com/aardappel/goose/issues/122)'s
+  fix, the generated C is the same whether the compiler was built with
+  libc++ (macOS) or libstdc++ (Linux). CI's `regenerate` job checks both.
 - **The Goose pieces copied in stay Apache-2.0**, while `zudiff`'s own code
   is MIT. Keep the two licences declared in `inst/COPYRIGHTS`.
 - **No R API inside `goose_r_run()`.** Nothing Goose calls may allocate R
