@@ -220,3 +220,42 @@ as a finished patch.
 | 2 contexts | days | re-entry; no clear-globals rule; GIL release |
 | 3 checked growth | weeks, uncertain | Windows without handlers |
 | 4 numeric results | upstream's call | no packed script |
+
+## Results, 2026-10-31
+
+Patches 0–2 are on the fork's branches `small-fixes` (`fd3f2eeb`),
+`hosted` (`35afce04`) and `contexts` (`0d1c106c`), stacked on `b362b5a5`.
+Goose's own suite passes at each, with new tests `export_header`,
+`hosted_runtime` and `hosted_contexts`. The hosts' branches are
+`goose-hosted` and `goose-contexts` in both repositories, as draft pull
+requests #27 and #28 here and pedrobtz/py-zugodiff#2 and #3. Measured on
+macOS x86-64 (i5-8500B); Linux and Windows are what the drafts' CI is for.
+
+| | zudiff | zugodiff |
+| --- | --- | --- |
+| First-party C: own runtime, patch 1, patch 2 | 753, 258, 341 | 599, 286, 341 |
+| `-Wall` warnings under the host's flags | 148 (upstream pin), 54, 27, 27 | 54, 27, 27 |
+| Symbols R rejects / exported symbols | none at every stage | only `PyInit__core` |
+| Tests | all pass; new overflow and nested-call tests | all pass; a nested call from a signal handler now runs |
+
+Timings of the core alone, 2 × 10^5 integer ids:
+
+- **Patch 0–1:** no measurable change in either host. The one regression,
+  Myers about 10% slower in zudiff, comes from the pin bump itself
+  (`e76d5c9` to `b362b5a5`, #24), before any patch.
+- **Patch 2, first version:** globals reached through `gs_gl` made Myers
+  8% and patience 6–7% slower. The compiler reloads the pointer after
+  stores it cannot prove apart; a `const` accessor recovered Myers in a
+  test.
+- **Patch 2, as pinned:** contexts copy globals in and out of their fixed
+  address instead (`0d1c106c`). The generated core is identical to patch
+  1's apart from the context functions, and Myers is back within noise.
+  Patience still measured about 11% slower in zugodiff, although its
+  compiled code is identical to patch 1's (1853 instructions each); the
+  runtime alone accounts for under 4%. The likeliest cause is placement
+  (a second globals struct moves the first relative to the page-aligned
+  stacks); it is to be checked on Linux and in R before acting on it.
+
+**Method.** An A/A test, two identical builds, differed by up to 6%, and a
+fixed order biased the builds timed last. Both evaluation tools now
+rotate the order; differences under about 6% are noise.

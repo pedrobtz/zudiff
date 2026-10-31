@@ -10,8 +10,8 @@
 # own library. For each it reports the Goose pin, the lines of first-party
 # C against generated C, compiler warnings under R's own flags, symbols R's
 # checks reject, and the test suite. Then it times the core, alternating
-# between the builds for N rounds (default 6), and reports medians and the
-# change from the first ref. Prints Markdown.
+# between the builds in a rotating order for N rounds (default 6), and
+# reports medians and the change from the first ref. Prints Markdown.
 
 args <- commandArgs(trailingOnly = TRUE)
 rounds <- 6L
@@ -44,6 +44,7 @@ on.exit({
     }
   }
   unlink(work, recursive = TRUE)
+  system2("git", c("-C", root, "worktree", "prune"), stdout = FALSE, stderr = FALSE)
 }, add = TRUE)
 
 # Symbols R's compiled-code check rejects (tools:::so_symbol_names_table),
@@ -137,7 +138,12 @@ writeLines(bench_code, bench_file)
 times <- list()
 for (k in seq_len(rounds)) {
   message("== timing, round ", k, " of ", rounds)
-  for (ref in refs) {
+  # The order rotates each round: a fixed order biased the later builds by
+  # a few per cent. Two identical builds still differ by up to ~6%, so
+  # treat smaller differences as noise.
+  shift <- (k - 1L) %% length(refs)
+  order <- c(refs[-seq_len(shift)], refs[seq_len(shift)])
+  for (ref in order) {
     out <- run("Rscript", bench_file, env = paste0("R_LIBS=", builds[[ref]]$lib))$out
     for (l in grep("^(myers|patience|raw|call) ", out, value = TRUE)) {
       p <- strsplit(trimws(l), " +")[[1]]
