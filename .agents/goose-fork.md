@@ -16,6 +16,12 @@ The same Goose core, `tools/goose/zudiff.goose`, runs in two hosts:
   generated C unchanged (`tools/sync-zudiff.sh`) and has its own runtime,
   `goose_py_runtime.c`, about 300 lines, POSIX only.
 
+`tools/eval-goose-fork <ref>...` compares zudiff builds, one per git ref:
+the Goose pin, first-party against generated C lines, `-Wall` warnings
+under R's flags, the symbols R rejects, the test suite, and the core's
+timings, alternating between builds. Each patch is evaluated against the
+ref before it.
+
 A patch reaches **go** when both hosts pass with it:
 
 - zudiff: `devtools::test(shuffle = TRUE)` with `ZUDIFF_EXHAUSTIVE=true`,
