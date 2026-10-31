@@ -251,10 +251,15 @@ Timings of the core alone, 2 × 10^5 integer ids:
   (`e76d5c9` to `b362b5a5`, #24), before any patch. Bisected (#24): it is
   upstream's alignment fix, `cec434a5`, +9% against its parent, while our
   own alignment fix on the old base (`f758863`, the closed
-  aardappel/goose#125) cost +0.5%. Upstream also types locals and
-  temporaries with the 1-byte-aligned `gs_i32`/`gs_i64`; ours touched only
-  pointers into packed memory. Which of upstream's sites costs the 9% is
-  still to find.
+  aardappel/goose#125) cost +0.5%. The cause is not the alignment but an
+  interaction: `HoistAggregateDecls` (an MSVC workaround) tells scalars by
+  C type name, and `cec434a5` renamed them `gs_i64` and so on and added
+  pointer typedefs, so every local was hoisted to the top of its function
+  (46 more spills in `run_tasks`). The fix, fork branch
+  `fix-hoist-scalars` (`73748d80`), brings `cec434a5` back to its parent's
+  time. A second regression, `ef2a88fc` (+4.8%, a TinyCC-oriented change
+  to temporaries), was hidden behind it; its sub-cause is not isolated.
+  Details on #24.
 - **Patch 2, first version:** globals reached through `gs_gl` made Myers
   8% and patience 6–7% slower. The compiler reloads the pointer after
   stores it cannot prove apart; a `const` accessor recovered Myers in a
