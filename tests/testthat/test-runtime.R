@@ -48,3 +48,20 @@ test_that("a data stack overflow is a runtime error, not a crash", {
   expect_identical(stack_used(), base)
   expect_identical(probe_index(1), 20)
 })
+
+test_that("a diff nested in another, from R code the poll runs, works", {
+  withr::defer(test_poll_callback(NULL, 0L))
+  set.seed(1)
+  a <- sample(4L, 2e4, TRUE)
+  b <- sample(4L, 2e4, TRUE)
+  # The first diff grows the core's global buffers, which stay.
+  alone <- diff_vec(a, b, max_cost = Inf)
+  base <- stack_used()
+  inner <- NULL
+  test_poll_callback(function() inner <<- diff_vec(1:5, c(1L, 3L, 5L, 6L)), 3L)
+  outer <- diff_vec(a, b, max_cost = Inf)
+  expect_identical(inner$distance, 3L)
+  expect_identical(outer$distance, alone$distance)
+  expect_identical(outer$op, alone$op)
+  expect_identical(stack_used(), base)
+})

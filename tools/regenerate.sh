@@ -48,7 +48,7 @@ trap 'rm -rf "$out"' EXIT
 # The compiler names source files by the path it was given. Run it from
 # tools/goose so the package's own file is a bare name.
 (cd "$pkg/tools/goose" &&
-  "$goose" -o "$out/zudiff_goose.c" --header "$out/zudiff_goose.h" \
+  "$goose" -o "$out/zudiff_goose.c" --header "$out/zudiff_goose.h" --contexts \
     zudiff.goose >/dev/null)
 
 # The standard library is named by its absolute path in the checkout.
