@@ -39,3 +39,12 @@ test_that("a failure rewinds the data stacks", {
   }
   expect_identical(probe_stack(10, FALSE), 9)
 })
+
+test_that("a data stack overflow is a runtime error, not a crash", {
+  base <- stack_used()
+  for (k in 1:10) {
+    expect_error(test_touch_gap(), class = "zudiff_runtime_error")
+  }
+  expect_identical(stack_used(), base)
+  expect_identical(probe_index(1), 20)
+})

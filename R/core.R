@@ -12,9 +12,9 @@ core_value <- function(res) {
   res
 }
 
-# A Ctrl-C that reached the Goose code but not R (on Windows, where the
-# console control handler takes it): raised as R raises one, an interrupt
-# condition, then back to the top level.
+# A Ctrl-C the Goose core's poll saw, inside R_ToplevelExec(), which keeps
+# it from R: raised as R raises one, an interrupt condition, then back to
+# the top level.
 interrupt_r <- function() {
   signalCondition(structure(class = c("interrupt", "condition"), list()))
   invokeRestart("abort")
@@ -60,4 +60,9 @@ stack_used <- function() .Call(zudiff_c_stack_used)
 # The n-th interrupt poll of the next Goose run raises a real SIGINT.
 test_raise_after <- function(n) {
   invisible(.Call(zudiff_c_test_raise_after, as.integer(n)))
+}
+
+# A write to a data stack's guard gap, as an overflow makes.
+test_touch_gap <- function() {
+  invisible(core_value(.Call(zudiff_c_test_touch_gap)))
 }

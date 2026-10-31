@@ -7,7 +7,7 @@ Authors@R: c(
     person("Wouter", "van Oortmerssen", role = c("ctb", "cph"),
            comment = paste("author of the 'Goose' language and compiler;",
                            "the runtime code the generated C inlines and",
-                           "the runtime pieces in src/goose_vendor.c")))
+                           "the runtime in src/goose_runtime.c")))
 Description: Computes the shortest edit script between two sequences
     (atomic vectors, raw vectors or the lines of two strings) and returns
     it as data, with Myers' algorithm (E. W. Myers (1986)

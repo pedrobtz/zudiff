@@ -1,3 +1,6 @@
-# Hide every symbol but R_init_zudiff: the Goose runtime's gs_* names must
-# not clash with another package's copy of them (design §3).
-PKG_CFLAGS = $(C_VISIBILITY)
+# GS_HOSTED: Goose's runtime (goose_runtime.c) in a host process, where
+# every failure returns to goose_host_call and nothing ends R.
+# Hide every symbol but R_init_zudiff and R_unload_zudiff: the Goose
+# runtime's gs_* names must not clash with another package's copy of them
+# (design §3).
+PKG_CFLAGS = $(C_VISIBILITY) -DGS_HOSTED

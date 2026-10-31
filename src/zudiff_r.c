@@ -1,16 +1,20 @@
 /* zudiff_r.c -- the R entry points.
 
-   Every call into Goose goes through goose_r_run(). A Goose runtime
-   failure then comes back here as a message, after the data stacks have
-   been rewound, and only then is anything done with R's API. Nothing in a
-   body function may call R: an R error raised inside goose_r_run() would
-   jump over the stack rewind and leave Goose's fault handler installed.
+   Every call into Goose goes through goose_host_call(), from Goose's own
+   runtime built with -DGS_HOSTED (src/goose_runtime.c). A Goose runtime
+   failure, a data stack overflow included, then comes back here as a
+   message, after the runtime has rewound the data stacks, and only then is
+   anything done with R's API. Nothing in a body function may raise an R
+   error: it would jump over the rewind and leave Goose's fault handler
+   installed. The one call into R during a run is the interrupt poll, which
+   runs R_CheckUserInterrupt() inside R_ToplevelExec(), so it cannot jump.
 
    Each entry point returns its value on success and, on failure, the
    message as a string, which R raises as a zudiff_runtime_error
    (R/core.R). No entry point returns a string on success, so the two
    cannot be confused, and success allocates nothing beyond the value. */
 
+#include <signal.h>
 #include <stdint.h>
 #include <string.h>
 
@@ -20,28 +24,53 @@
 #include <R_ext/Rdynload.h>
 #include <R_ext/Visibility.h>
 
-#include "goose_r_runtime.h"
 #include "goose_version.h"
 #include "zudiff_goose.h"
 
-#define ERRLEN 512
 #define STR_(x) #x
 #define STR(x) STR_(x)
 
-static SEXP failure(const char *err) { return Rf_mkString(err); }
+/* A failed run's message, which goose_host_call() returns. */
+static SEXP failure(const uint8_t *msg, int64_t len) {
+  return Rf_ScalarString(Rf_mkCharLenCE((const char *) msg, (int) len, CE_UTF8));
+}
 
-/* A Ctrl-C the Goose code reported. On POSIX the signal has gone on to R's
-   handler, and R_CheckUserInterrupt() acts on it. On Windows R never saw
-   it: the failure carries an attribute, and core_value() raises the
-   interrupt in R (R/core.R). */
-static SEXP interrupted(const char *err) {
-#ifndef _WIN32
-  R_CheckUserInterrupt();
-#endif
-  SEXP out = PROTECT(failure(err));
+/* A Ctrl-C the poll saw. R_ToplevelExec() has consumed it, so the failure
+   carries an attribute, and core_value() raises the interrupt in R
+   (R/core.R). */
+static SEXP interrupted(const uint8_t *msg, int64_t len) {
+  SEXP out = PROTECT(failure(msg, len));
   Rf_setAttrib(out, Rf_install("zudiff_interrupt"), Rf_ScalarLogical(1));
   UNPROTECT(1);
   return out;
+}
+
+static SEXP run_failed(int failed, const uint8_t *msg, int64_t len) {
+  return failed == 2 ? interrupted(msg, len) : failure(msg, len);
+}
+
+/* --- interrupts ----------------------------------------------------------- */
+
+/* Test hook: the n-th poll of the next run raises SIGINT, which R's own
+   handler catches. On Windows the poll reports the interrupt itself, as a
+   Ctrl-C would make R_CheckUserInterrupt() do. */
+static long raise_after;
+
+static void check_interrupt(void *unused) {
+  (void) unused;
+  R_CheckUserInterrupt();
+}
+
+/* Called by the Goose core every 1024 search steps (goose_host_poll). */
+static int poll_interrupt(void) {
+  if (raise_after > 0 && --raise_after == 0) {
+#ifdef _WIN32
+    return 1;
+#else
+    raise(SIGINT);
+#endif
+  }
+  return !R_ToplevelExec(check_interrupt, NULL);
 }
 
 /* --- diffs ---------------------------------------------------------------- */
@@ -88,21 +117,17 @@ SEXP zudiff_c_diff(SEXP a, SEXP b, SEXP algorithm, SEXP max_cost) {
   double mc = Rf_asReal(max_cost);
   c.max_cost = (ISNAN(mc) || mc >= 9223372036854775807.0) ? INT64_MAX
                : mc < 0 ? -1 : (int64_t) mc;
-  char err[ERRLEN];
-  /* Short diffs finish too soon to need Ctrl-C caught inside them (R acts
-     on one after the call returns), so only long ones pay for it. */
-  int64_t size = c.bytes ? c.ba.len + c.bb.len : c.ia.len + c.ib.len;
-  int failed = size >= 4096
-                   ? goose_r_run_interruptible(diff_body, &c, err, sizeof err)
-                   : goose_r_run(diff_body, &c, err, sizeof err);
-  if (failed == 2) return interrupted(err);
-  if (failed) return failure(err);
+  const uint8_t *msg;
+  int64_t len;
+  int failed = goose_host_call(diff_body, &c, &msg, &len);
+  raise_after = 0;
+  if (failed) return run_failed(failed, msg, len);
   SEXP out = Rf_allocVector(RAWSXP, (R_xlen_t) c.n);
   if (c.n > 0) memcpy(RAW(out), c.out, (size_t) c.n);
   return out;
 }
 
-/* --- test hooks --------------------------------------------------------- */
+/* --- test hooks ----------------------------------------------------------- */
 
 typedef struct {
   int64_t i, v;
@@ -115,9 +140,10 @@ static void probe_index_body(void *p) {
 
 SEXP zudiff_c_probe_index(SEXP i) {
   probe_index_call c = {(int64_t) Rf_asInteger(i), 0};
-  char err[ERRLEN];
-  if (goose_r_run(probe_index_body, &c, err, sizeof err))
-    return failure(err);
+  const uint8_t *msg;
+  int64_t len;
+  int failed = goose_host_call(probe_index_body, &c, &msg, &len);
+  if (failed) return run_failed(failed, msg, len);
   return Rf_ScalarReal((double) c.v);
 }
 
@@ -134,9 +160,10 @@ static void probe_sum_body(void *p) {
 /* x is an integer vector, checked in R. It is borrowed, not copied. */
 SEXP zudiff_c_probe_sum(SEXP x) {
   probe_sum_call c = {{INTEGER(x), (int64_t) XLENGTH(x)}, 0};
-  char err[ERRLEN];
-  if (goose_r_run(probe_sum_body, &c, err, sizeof err))
-    return failure(err);
+  const uint8_t *msg;
+  int64_t len;
+  int failed = goose_host_call(probe_sum_body, &c, &msg, &len);
+  if (failed) return run_failed(failed, msg, len);
   return Rf_ScalarReal((double) c.v);
 }
 
@@ -153,22 +180,37 @@ static void probe_stack_body(void *p) {
 SEXP zudiff_c_probe_stack(SEXP n, SEXP fail) {
   probe_stack_call c = {(int64_t) Rf_asInteger(n), 0,
                         (uint8_t) Rf_asLogical(fail)};
-  char err[ERRLEN];
-  if (goose_r_run(probe_stack_body, &c, err, sizeof err))
-    return failure(err);
+  const uint8_t *msg;
+  int64_t len;
+  int failed = goose_host_call(probe_stack_body, &c, &msg, &len);
+  if (failed) return run_failed(failed, msg, len);
   return Rf_ScalarReal((double) c.v);
 }
 
+/* A write to the first data stack's guard gap, as an overflow makes: it
+   must come back as a failure, not end R. */
+static void touch_gap_body(void *p) {
+  *(volatile uint8_t *) p = 1;
+}
+
+SEXP zudiff_c_test_touch_gap(void) {
+  const uint8_t *msg;
+  int64_t len;
+  int failed = goose_host_call(touch_gap_body, goose_host_test_gap(), &msg, &len);
+  if (failed) return run_failed(failed, msg, len);
+  return R_NilValue;
+}
+
 SEXP zudiff_c_test_raise_after(SEXP n) {
-  goose_r_test_raise_after((long) Rf_asInteger(n));
+  raise_after = (long) Rf_asInteger(n);
   return R_NilValue;
 }
 
 SEXP zudiff_c_stack_used(void) {
-  return Rf_ScalarReal((double) goose_r_stack_used());
+  return Rf_ScalarReal((double) goose_host_stack_used());
 }
 
-/* --- information -------------------------------------------------------- */
+/* --- information ---------------------------------------------------------- */
 
 SEXP zudiff_c_goose_info(void) {
   SEXP out = PROTECT(Rf_allocVector(STRSXP, 2));
@@ -178,7 +220,7 @@ SEXP zudiff_c_goose_info(void) {
   return out;
 }
 
-/* --- registration ------------------------------------------------------- */
+/* --- registration --------------------------------------------------------- */
 
 static void init_body(void *unused) {
   static char name[] = "zudiff";
@@ -194,18 +236,22 @@ static const R_CallMethodDef call_methods[] = {
     {"zudiff_c_probe_stack", (DL_FUNC) &zudiff_c_probe_stack, 2},
     {"zudiff_c_stack_used", (DL_FUNC) &zudiff_c_stack_used, 0},
     {"zudiff_c_test_raise_after", (DL_FUNC) &zudiff_c_test_raise_after, 1},
+    {"zudiff_c_test_touch_gap", (DL_FUNC) &zudiff_c_test_touch_gap, 0},
     {"zudiff_c_goose_info", (DL_FUNC) &zudiff_c_goose_info, 0},
     {NULL, NULL, 0}};
 
 void attribute_visible R_unload_zudiff(DllInfo *dll) {
   (void) dll;
-  goose_r_unload();
+  goose_host_unload();
 }
 
 void attribute_visible R_init_zudiff(DllInfo *dll) {
-  char err[ERRLEN];
-  if (goose_r_run(init_body, NULL, err, sizeof err))
-    Rf_error("zudiff: cannot start the Goose runtime: %s", err);
+  goose_host h = {NULL, poll_interrupt};
+  const uint8_t *msg;
+  int64_t len;
+  goose_host_set(&h);
+  if (goose_host_call(init_body, NULL, &msg, &len))
+    Rf_error("zudiff: cannot start the Goose runtime: %.*s", (int) len, (const char *) msg);
   R_registerRoutines(dll, NULL, call_methods, NULL, NULL);
   R_useDynamicSymbols(dll, FALSE);
   R_forceSymbols(dll, TRUE);
