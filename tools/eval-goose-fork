@@ -1,0 +1,170 @@
+#!/usr/bin/env Rscript
+# Compares builds of zudiff, one per git ref, for the Goose fork patches
+# (.agents/goose-fork.md). Run from the package root:
+#
+#   tools/eval-goose-fork [--rounds N] [--exhaustive] <ref> <ref> ...
+#
+# e.g. tools/eval-goose-fork origin/main goose-pin-fork goose-hosted
+#
+# Each ref is checked out into a temporary worktree and installed into its
+# own library. For each it reports the Goose pin, the lines of first-party
+# C against generated C, compiler warnings under R's own flags, symbols R's
+# checks reject, and the test suite. Then it times the core, alternating
+# between the builds in a rotating order for N rounds (default 6), and
+# reports medians and the change from the first ref. Prints Markdown.
+
+args <- commandArgs(trailingOnly = TRUE)
+rounds <- 6L
+exhaustive <- FALSE
+refs <- character()
+i <- 1L
+while (i <= length(args)) {
+  a <- args[[i]]
+  if (a == "--rounds") {
+    rounds <- as.integer(args[[i + 1L]])
+    i <- i + 1L
+  } else if (a == "--exhaustive") {
+    exhaustive <- TRUE
+  } else {
+    refs <- c(refs, a)
+  }
+  i <- i + 1L
+}
+if (length(refs) < 1L) {
+  stop("usage: tools/eval-goose-fork [--rounds N] [--exhaustive] <ref>...", call. = FALSE)
+}
+
+root <- normalizePath(".")
+work <- tempfile("eval-goose-fork-")
+dir.create(work)
+on.exit({
+  for (d in list.dirs(work, recursive = FALSE)) {
+    if (file.exists(file.path(d, ".git"))) {
+      system2("git", c("-C", root, "worktree", "remove", "--force", d), stdout = FALSE, stderr = FALSE)
+    }
+  }
+  unlink(work, recursive = TRUE)
+  system2("git", c("-C", root, "worktree", "prune"), stdout = FALSE, stderr = FALSE)
+}, add = TRUE)
+
+# Symbols R's compiled-code check rejects (tools:::so_symbol_names_table),
+# as nm prints them on Linux and macOS.
+forbidden <- c(
+  "abort", "exit", "_exit", "_Exit", "quick_exit", "printf", "puts", "putchar",
+  "stdout", "stderr", "__stdoutp", "__stderrp", "sprintf", "vprintf", "vsprintf",
+  "rand", "srand", "random", "srandom", "srand48", "__assert_fail", "__assert_rtn"
+)
+generated <- c("zudiff_goose.c", "zudiff_goose.h", "goose_runtime.c", "goose_vendor.c", "goose_version.h")
+
+run <- function(cmd, args, env = character(), wd = NULL) {
+  old <- if (!is.null(wd)) setwd(wd)
+  on.exit(if (!is.null(old)) setwd(old))
+  out <- suppressWarnings(system2(cmd, args, stdout = TRUE, stderr = TRUE, env = env))
+  list(out = out, status = attr(out, "status") %||% 0L)
+}
+`%||%` <- function(a, b) if (is.null(a)) b else a
+
+lines_of <- function(files) sum(vapply(files, function(f) length(readLines(f, warn = FALSE)), 0L))
+
+builds <- list()
+for (ref in refs) {
+  slug <- gsub("[^A-Za-z0-9]+", "-", ref)
+  src <- file.path(work, slug)
+  lib <- file.path(work, paste0(slug, "-lib"))
+  dir.create(lib)
+  r <- run("git", c("-C", root, "worktree", "add", "--detach", src, ref))
+  if (r$status != 0) stop("cannot check out ", ref, ":\n", paste(r$out, collapse = "\n"))
+  message("== ", ref, ": installing")
+  inst <- run("R", c("CMD", "INSTALL", "--preclean", "-l", lib, src))
+  if (inst$status != 0) stop("install of ", ref, " failed:\n", paste(tail(inst$out, 30), collapse = "\n"))
+  warns <- grep("warning:", inst$out, value = TRUE)
+  so <- list.files(file.path(lib, "zudiff", "libs"), pattern = "\\.(so|dll)$", full.names = TRUE)[[1]]
+  undef <- run("nm", c("-u", so))$out
+  undef <- sub(".* ", "", trimws(undef))
+  if (Sys.info()[["sysname"]] == "Darwin") undef <- sub("^_", "", undef)
+  bad <- intersect(undef, forbidden)
+  cfiles <- list.files(file.path(src, "src"), pattern = "\\.[ch]$", full.names = TRUE)
+  own <- cfiles[!basename(cfiles) %in% generated]
+  gen <- cfiles[basename(cfiles) %in% generated]
+  message("== ", ref, ": testing")
+  env <- c(paste0("R_LIBS=", lib), if (exhaustive) "ZUDIFF_EXHAUSTIVE=true", "NOT_CRAN=true")
+  test <- run("Rscript", c("-e", shQuote(paste(
+    "r <- as.data.frame(testthat::test_dir('tests/testthat', package = 'zudiff',",
+    "load_package = 'installed', reporter = 'silent', stop_on_failure = FALSE));",
+    "cat('RESULT', nrow(r), sum(r$failed), sum(r$error), sum(r$skipped), '\\n')"
+  ))), env = env, wd = src)
+  res <- grep("^RESULT", test$out, value = TRUE)
+  nums <- if (length(res)) as.integer(strsplit(res, " ")[[1]][-1]) else c(NA, NA, NA, NA)
+  builds[[ref]] <- list(
+    lib = lib,
+    pin = substr(readLines(file.path(src, "tools", "goose", "PIN"))[[1]], 1, 8),
+    own = lines_of(own), gen = lines_of(gen),
+    warnings = length(warns), forbidden = if (length(bad)) paste(bad, collapse = " ") else "none",
+    tests = nums
+  )
+}
+
+cat("\n## Builds\n\n")
+cat("| ref | Goose pin | first-party C lines | generated C lines | -Wall warnings | forbidden symbols | tests (failed, errors, skipped) |\n")
+cat("| --- | --- | --- | --- | --- | --- | --- |\n")
+for (ref in refs) {
+  b <- builds[[ref]]
+  cat(sprintf(
+    "| %s | %s | %d | %d | %d | %s | %s (%s, %s, %s) |\n", ref, b$pin, b$own, b$gen,
+    b$warnings, b$forbidden, b$tests[1], b$tests[2], b$tests[3], b$tests[4]
+  ))
+}
+
+# --- timing ----------------------------------------------------------------
+
+bench_code <- "
+suppressPackageStartupMessages(library(zudiff))
+set.seed(1)
+x <- sample(1e4, 2e5, TRUE); y <- x; i <- sample(length(y), 2000); y[i] <- y[i] + 1e4L
+z <- c(x, y); ids <- match(z, z); ia <- ids[seq_along(x)]; ib <- ids[length(x) + seq_along(y)]
+a <- as.raw(sample(0:255, 1e7, TRUE)); b <- a
+at <- sort(sample(length(b), 100)); b[at] <- as.raw((as.integer(b[at]) + 1L) %% 256L)
+f <- zudiff:::zudiff_c_diff
+p <- zudiff:::zudiff_c_probe_index
+med <- function(e, n) { t <- numeric(n); for (k in seq_len(n)) t[k] <- system.time(e())[['elapsed']]; median(t) }
+cat('myers', med(function() .Call(f, ia, ib, 0L, -1), 15) * 1e3, '\n')
+cat('patience', med(function() .Call(f, ia, ib, 1L, -1), 7) * 1e3, '\n')
+cat('raw', med(function() diff_vec(a, b), 7) * 1e3, '\n')
+n <- 2e5; t0 <- proc.time()[['elapsed']]; for (k in seq_len(n)) .Call(p, 1L); t1 <- proc.time()[['elapsed']]
+cat('call', (t1 - t0) / n * 1e9, '\n')
+"
+bench_file <- file.path(work, "bench.R")
+writeLines(bench_code, bench_file)
+times <- list()
+for (k in seq_len(rounds)) {
+  message("== timing, round ", k, " of ", rounds)
+  # The order rotates each round: a fixed order biased the later builds by
+  # a few per cent. Two identical builds still differ by up to ~6%, so
+  # treat smaller differences as noise.
+  shift <- (k - 1L) %% length(refs)
+  order <- c(refs[-seq_len(shift)], refs[seq_len(shift)])
+  for (ref in order) {
+    out <- run("Rscript", bench_file, env = paste0("R_LIBS=", builds[[ref]]$lib))$out
+    for (l in grep("^(myers|patience|raw|call) ", out, value = TRUE)) {
+      p <- strsplit(trimws(l), " +")[[1]]
+      times[[length(times) + 1L]] <- data.frame(ref = ref, what = p[1], value = as.numeric(p[2]))
+    }
+  }
+}
+times <- do.call(rbind, times)
+cat(sprintf("\n## Core timings: median of %d rounds, alternating builds\n\n", rounds))
+whats <- c(myers = "Myers, 2e5 ids (ms)", patience = "patience, 2e5 ids (ms)",
+           raw = "diff_vec(), 10 MB raw (ms)", call = "empty .Call (ns)")
+cat("| ref |", paste(whats, collapse = " | "), "|\n")
+cat("| --- |", paste(rep("---", length(whats)), collapse = " | "), "|\n")
+base <- NULL
+for (ref in refs) {
+  m <- vapply(names(whats), function(w) median(times$value[times$ref == ref & times$what == w]), 0)
+  if (is.null(base)) base <- m
+  cell <- if (identical(ref, refs[[1]])) {
+    sprintf("%.1f", m)
+  } else {
+    sprintf("%.1f (%+.1f%%)", m, 100 * (m / base - 1))
+  }
+  cat("|", ref, "|", paste(cell, collapse = " | "), "|\n")
+}

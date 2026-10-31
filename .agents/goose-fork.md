@@ -1,0 +1,308 @@
+# zudiff: the Goose fork
+
+How zudiff's Goose runtime is to be replaced by patches to Goose itself,
+tried in the fork `pedrobtz/goose` and proposed upstream once they work.
+Moved here on 2026-10-31 from `pedrobtz/zugojson`'s runtime research plan,
+which is no longer pursued. This file is a research plan: design.md still
+decides what v0.1.0 ships, and nothing here blocks it.
+
+## Hosts
+
+The same Goose core, `tools/goose/zudiff.goose`, runs in two hosts:
+
+- **zudiff** (R), this package. Its runtime is
+  `src/goose_r_runtime.c`, 509 lines, with a Windows half.
+- **zugodiff** (Python), `pedrobtz/py-zugodiff`. It takes zudiff's
+  generated C unchanged (`tools/sync-zudiff.sh`) and has its own runtime,
+  `goose_py_runtime.c`, about 300 lines, POSIX only.
+
+`tools/eval-goose-fork <ref>...` compares zudiff builds, one per git ref:
+the Goose pin, first-party against generated C lines, `-Wall` warnings
+under R's flags, the symbols R rejects, the test suite, and the core's
+timings, alternating between builds. Each patch is evaluated against the
+ref before it.
+
+A patch reaches **go** when both hosts pass with it:
+
+- zudiff: `devtools::test(shuffle = TRUE)` with `ZUDIFF_EXHAUSTIVE=true`,
+  `devtools::check()` clean, `tools/check-symbols.sh`, `tools/wine/run`,
+  and the r-actions Windows legs;
+- zudiff: no `tools/run-benchmarks` row more than 5% slower than at the
+  previous patch, and design §10 still met;
+- zugodiff: `pytest`, its CI (Linux, macOS, UBSan), and `bench/bench.py`.
+
+## Rules
+
+- **v0.1.0 comes first.** zudiff's `main` takes only what has reached go,
+  and not before v0.1.0 is on CRAN. Until then a patch lives on a zudiff
+  branch, `goose-<patch>`, pinning the fork commit it measures.
+- **One fork branch per patch,** stacked in the order below on upstream
+  `master`. Each is then a patch series that upstream can take in order,
+  or stop after any one.
+- **Rebase on upstream `master`** before each patch starts, before each
+  recorded benchmark, and before anything is proposed. Drop what upstream
+  now does. Record the upstream commit each result was measured on.
+- **Propose upstream only after go,** one proposal per patch. Every post to
+  `aardappel/goose` needs the user's approval.
+- **zugodiff follows zudiff's generated C.** Regenerate in zudiff, then
+  `tools/sync-zudiff.sh` in zugodiff; never edit the C there.
+- **Tracking:** #23 lists the patches and their state.
+
+## Before any patch
+
+These need no change to Goose and are worth doing on their own:
+
+- **#22, layer 1:** port zugojson's Piece 0 (`goose_r_run()` inside
+  `R_UnwindProtect`), and poll `R_CheckUserInterrupt()` from
+  `zudiff_check_interrupt()`. It deletes the SIGINT and console control
+  handlers. zugodiff already works this way, with `PyErr_CheckSignals()`.
+- **#24:** bisect the 4–6% slowdown on integer ids between `e76d5c9` and
+  `2ed1a63d`, so that patches are measured against a known base.
+
+## What every host needed
+
+The Python port tested what is specific to R. The same five needs came
+back unchanged. Only the glue differs: `SEXP` against `PyObject *`,
+`R_UnwindProtect` against an exception already set.
+
+1. **A failure is the host's error, not a process exit.** Rewind the data
+   stacks, keep the message, return.
+2. **Fault handlers only while Goose runs.** R and CPython both own
+   SIGSEGV.
+3. **Interrupts belong to the host:** `R_CheckUserInterrupt()`,
+   `PyErr_CheckSignals()`. Both may run host code inside the call.
+4. **A call inside a call must be safe.** A Python signal handler run by
+   the poll called back into zugodiff. Today the only safe answer is to
+   refuse it.
+5. **No stdout, stderr, setvbuf, sigaltstack or exit.**
+
+The copied runtimes have drifted from upstream, too. Upstream's error
+table has 20 entries and ours 17. So at the fork pin, "invalid array
+length", "slice not within this array" and "slice pool span tree is
+corrupt" print as "runtime error".
+
+## What Goose already has
+
+From the source at `b362b5a5`, upstream `2ed1a63d` plus the `--header`
+fix:
+
+- **Contained failures.** `gs_fail()` `longjmp`s to a thread-local
+  `gs_contain` when one is set, keeping the message, instead of printing
+  and ending the process. Contained workers use it. `gs_panic()`,
+  `gs_exit()`, `gs_stack_overflow()` and the fault handler bypass it.
+- **An in-process host.** `goose run` runs programs inside the compiler
+  (`jit_runtime.c`, `GS_HOSTED_JIT`). There `gs_end()` `longjmp`s back to
+  the compiler, and the fault handlers' installation is recorded so they
+  can be removed, the Windows vectored handler included.
+- **Globals behind one pointer.** Threaded builds reach `gs_globals_t`
+  through the thread-local `gs_gl`, and the data stacks through
+  `gs_stks`. Single-threaded builds use a static `gs_globals_main`
+  (`codegen.h:1548`).
+- **Memory given back:** `gs_trim_memory()`.
+- **One checked growth site:** `gs_stack_overflow()`, for a bulk append
+  past `GS_STACK_RESERVE` (`0e62366f`).
+
+## Patches
+
+### 0: small fixes
+
+- `__extension__` on the `unsigned __int128` typedef. That removes the
+  `sed` patch in `tools/regenerate.sh`.
+- `GS_API` wrapped in `#ifndef GS_API`, so the runtime object can be built
+  with hidden symbols.
+- Done: `--header` declares the alignment types (`b362b5a5`), offered
+  upstream when aardappel/goose#125 was closed.
+
+### 1: `GS_HOSTED`, a host mode
+
+Generalize `GS_HOSTED_JIT` into a mode any host can use, built on
+`gs_contain`. The runtime object (`goose --emit-runtime --hosted`) offers:
+
+```c
+/* Runs body(data) as a contained call: any failure in it, a data stack
+   overflow included, rewinds every data stack, stores the message and
+   returns 1, or 2 when the host's poll asked to stop. Fault handlers are
+   installed for the call only. A call during another is refused with 1
+   until contexts (patch 2) allow it. */
+int gs_host_call(void (*body)(void *), void *data, const uint8_t **msg, int64_t *len);
+
+typedef struct {
+    void (*out)(int stream, const uint8_t *p, int64_t len); /* print, eprint */
+    int (*poll)(void);  /* nonzero: stop the call */
+} gs_host;
+void gs_host_set(const gs_host *host);
+```
+
+Under `GS_HOSTED`:
+
+- `gs_panic()`, `gs_exit()`, `gs_stack_overflow()` and the fault handler's
+  overflow branch go through `gs_fail()`, and so reach `gs_contain`. The
+  jump out of the fault handler must restore the signal mask
+  (`sigsetjmp`, not the `_setjmp` used today).
+- `gs_host_call()` installs the fault handler and removes it on return,
+  as the JIT's already is. On Windows the vectored handler is added once
+  and removed by `gs_host_unload()`, as zudiff's `R_unload_zudiff()` does.
+- There is no `setvbuf`, `sigaltstack` or `_setmode`. `print` goes to
+  `host.out`.
+- `gs_host_poll()`, callable from Goose, fails the call with an interrupt
+  when `host.poll` returns nonzero. It replaces `zudiff_check_interrupt`.
+
+**Deleted:**
+- zudiff: `goose_r_runtime.c` shrinks to the glue's few lines.
+  `goose_vendor.c`, the anchor ranges in `tools/regenerate.sh` and the
+  error-table drift go.
+- zugodiff: `goose_py_runtime.c` goes the same way.
+
+zugojson's plan had proposed `fail`, `out` and `reserve` hooks. `fail`
+needs no hook, because `gs_contain` does it. `reserve` is not needed,
+because only the signals conflict with R and CPython, not reserved
+address space.
+
+### 2: contexts
+
+Behind `--context`, a single-threaded build also reaches globals through
+`gs_gl`, and the runtime offers:
+
+```c
+gs_ctx *gs_ctx_new(void);         /* fresh globals and stack block */
+gs_ctx *gs_ctx_swap(gs_ctx *ctx); /* gs_gl, gs_stks, gs_nstks; returns the old */
+void gs_ctx_reset(gs_ctx *ctx);   /* globals re-initialized, tops rewound */
+void gs_ctx_free(gs_ctx *ctx);    /* regions released */
+```
+
+`gs_ctx_new()` does what `gs_program_init()` and a worker's entry thunk
+already do. The region registry (`gs_regions`, thread-local today)
+becomes per context.
+
+**Gives:**
+- a nested call that works instead of being refused;
+- no "every export clears its globals first" invariant (CLAUDE.md);
+- in zugodiff, one context per thread, so a long diff can release the GIL.
+  That is the only way to free-threaded CPython.
+
+**Cost to measure:** `GS_GL` through a pointer. Threaded builds already
+pay it.
+
+### 3: checked growth
+
+`--checked-stacks` checks capacity before stack space is claimed, and
+calls `gs_stack_overflow()` instead of relying on the guard gap. On POSIX
+patch 1's fault handler is enough, since only overflow needs it. On
+Windows, growth itself needs the vectored handler to commit pages (design
+D10). This patch removes it, and with it the last handler from both
+hosts. It is the patch that decides whether Goose packages can be plain C
+extensions everywhere, and the one most likely to stop. Go also requires
+deleting zudiff's Windows half with the Windows legs green.
+
+### 4: numeric slice results from exports
+
+Goose spec §7.11 allows only `const u8[:]`. Allowing `const i32[:]` the
+same way (a pointer plus `int64_t *out_len`) removes the packed script
+(design §7, D4) and its unpacking in R and Python. This is a language
+change: propose it upstream as a request with zudiff as the example, not
+as a finished patch.
+
+## Not proposed
+
+- **Equality or hashing in Goose.** Turning values into ids dominates in
+  both hosts: R's `match()` is 65% of the §10 text row, and Python's
+  `dict` is 45 of zugodiff's 48 ms. The host's equality must stay (D3),
+  so that speed-up is host C, not Goose.
+- **A Goose-side R or Python API.** Values cross only at the export
+  boundary.
+
+## Order
+
+| Patch | Size | Unblocks |
+| --- | --- | --- |
+| 0 small fixes | hours | `regenerate.sh` without patches |
+| 1 `GS_HOSTED` | days | the stock runtime in both hosts |
+| 2 contexts | days | re-entry; no clear-globals rule; GIL release |
+| 3 checked growth | weeks, uncertain | Windows without handlers |
+| 4 numeric results | upstream's call | no packed script |
+
+## Results, 2026-10-31
+
+Patches 0–2 are on the fork's branches `small-fixes` (`fd3f2eeb`),
+`hosted` (`c08179db`) and `contexts-v2` (`7ae926a4`), stacked on
+`b362b5a5`. (`contexts`, `0d1c106c`, is the same patch before `hosted`
+gained its stdin fix; the first Windows run showed that a hosted program
+still reached stdin, through `__acrt_iob_func`.)
+Goose's own suite passes at each, with new tests `export_header`,
+`hosted_runtime` and `hosted_contexts`. The hosts' branches are
+`goose-hosted` and `goose-contexts` in both repositories, as draft pull
+requests #27 and #28 here and pedrobtz/py-zugodiff#2 and #3. Measured on
+macOS x86-64 (i5-8500B). py-zugodiff#2 passed on Linux (Python 3.10 and
+3.13, UBSan); the hosted runtime also cross-compiles for Windows with
+mingw-w64 without warnings and without stream, exit or printf imports.
+The drafts' CI covers the rest.
+
+| | zudiff | zugodiff |
+| --- | --- | --- |
+| First-party C: own runtime, patch 1, patch 2 | 753, 258, 341 | 599, 286, 341 |
+| `-Wall` warnings under the host's flags | 148 (upstream pin), 54, 27, 27 | 54, 27, 27 |
+| Symbols R rejects / exported symbols | none at every stage | only `PyInit__core` |
+| Tests | all pass; new overflow and nested-call tests | all pass; a nested call from a signal handler now runs |
+
+Timings of the core alone, 2 × 10^5 integer ids:
+
+- **Patch 0–1:** no measurable change in either host. The one regression,
+  Myers about 10% slower in zudiff, comes from the pin bump itself
+  (`e76d5c9` to `b362b5a5`, #24), before any patch. Bisected (#24): it is
+  upstream's alignment fix, `cec434a5`, +9% against its parent, while our
+  own alignment fix on the old base (`f758863`, the closed
+  aardappel/goose#125) cost +0.5%. The cause is not the alignment but an
+  interaction: `HoistAggregateDecls` (an MSVC workaround) tells scalars by
+  C type name, and `cec434a5` renamed them `gs_i64` and so on and added
+  pointer typedefs, so every local was hoisted to the top of its function
+  (46 more spills in `run_tasks`). The fix, fork branch
+  `fix-hoist-scalars` (`73748d80`), brings `cec434a5` back to its parent's
+  time. A second regression, `ef2a88fc` (+4.8%, a TinyCC-oriented change
+  to temporaries), was hidden behind it; its sub-cause is not isolated.
+  Details on #24.
+- **Patch 2, first version:** globals reached through `gs_gl` made Myers
+  8% and patience 6–7% slower. The compiler reloads the pointer after
+  stores it cannot prove apart; a `const` accessor recovered Myers in a
+  test.
+- **Patch 2, as pinned:** contexts copy globals in and out of their fixed
+  address instead (`0d1c106c`). The generated core is identical to patch
+  1's apart from the context functions, and Myers is back within noise.
+  Patience still measured about 11% slower in zugodiff, although its
+  compiled code is identical to patch 1's (1853 instructions each); the
+  runtime alone accounts for under 4%. On a GitHub Linux runner (AMD EPYC
+  9V45, bench workflow on py-zugodiff's `bench-linux` branch) every core
+  timing of patches 0–2 is within the A/A control's ±1.1%, patience
+  included: the gap is particular to this Mac's Intel CPU, where identical
+  code measured differently, and not a cost of contexts.
+
+**Method.** An A/A test, two identical builds, differed by up to 6%, and a
+fixed order biased the builds timed last. Both evaluation tools now
+rotate the order; differences under about 6% are noise.
+
+## The pin's slowdown, explained (2026-10-31)
+
+The stack is now rebuilt on the hoisting fix: fork branches `base-v2`
+(`0c470701`, `b362b5a5` plus the fix), `small-fixes-v2`, `hosted-v2`
+(`31fac6fd`) and `contexts-v3` (`70569be5`). Goose's full suite passes on
+top. zudiff's `goose-pin-fix` branch pins `base-v2` as a baseline with no
+patch. Evaluation in zudiff, 8 rotating rounds (R's timer has 1 ms
+resolution):
+
+| Build | Myers | patience | 10 MB raw | empty `.Call` |
+| --- | --- | --- | --- | --- |
+| `main` (`e76d5c9`, own runtime) | 22.0 ms | 72.0 ms | 52.0 ms | 4240 ns |
+| `goose-pin-fork` (`b362b5a5`) | +9.1% | +4.2% | 0% | +0.8% |
+| `goose-pin-fix` (+ hoisting fix) | +4.5% | −0.7% | −1.9% | −0.7% |
+| `goose-hosted` (patches 0–1) | +4.5% | +1.4% | +1.9% | +0.1% |
+| `goose-contexts` (patch 2) | +4.5% | 0.0% | 0.0% | −0.2% |
+
+- Upstream's two regressions on zudiff's core, both found by bisecting
+  with a C driver and checked against their parents (#24):
+  - `cec434a5`, +9%: every local hoisted by `HoistAggregateDecls`, whose
+    list of scalar type names missed the new `gs_*` names. Fixed by
+    `fix-hoist-scalars` (`73748d80`).
+  - `ef2a88fc`, about +5%: its `GenLocNow` sub-change (an index variable
+    used directly in a location instead of a copy), which targets TinyCC.
+    Not fixed; turning it off recovers all but 2%.
+- Patches 0–2 add nothing measurable on top of either.
+- The fix also shrinks the generated C: 8010 to 7337 lines at the pin.
